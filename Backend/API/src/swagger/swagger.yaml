@@ -1,0 +1,2058 @@
+openapi: 3.0.0
+info:
+  title: Restaurant RAG API
+  version: 1.0.0
+  description: |
+    Complete API documentation for Restaurant RAG system.
+
+    ## Features
+    - Restaurant management
+    - Menu item management
+    - Order processing
+    - Voice ordering support
+    - Multi-restaurant search
+
+    ## Database
+    - **PostgreSQL (Neon)**: Main relational data (restaurants, menu items, orders)
+    - **MongoDB Atlas**: Order history, audit logs, system logs
+
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.example.com
+    description: Production server
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Restaurants
+    description: Restaurant management endpoints
+  - name: Menu
+    description: Menu item management endpoints
+  - name: Categories
+    description: Menu category management endpoints
+  - name: Orders
+    description: Order management endpoints
+  - name: Users
+    description: User management endpoints
+  - name: Images
+    description: Image upload endpoints
+  - name: Admin
+    description: Admin and MongoDB management endpoints
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Check if the API is running
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  timestamp:
+                    type: string
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and get JWT token
+      description: |
+        Generate JWT access token and refresh token for a user.
+        Supports multiple login methods:
+        - Email + password
+        - Phone + password
+        - user_id (for backward compatibility, no password required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Email address (required if phone and user_id not provided)
+                  example: "user@example.com"
+                phone:
+                  type: string
+                  description: Phone number (required if email and user_id not provided)
+                  example: "+1234567890"
+                password:
+                  type: string
+                  format: password
+                  description: Password (required if email or phone is provided)
+                  example: "securepassword123"
+                user_id:
+                  type: string
+                  format: uuid
+                  description: User ID for backward compatibility (no password required)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      access_token:
+                        type: string
+                      refresh_token:
+                        type: string
+                      user:
+                        $ref: "#/components/schemas/User"
+                  message:
+                    type: string
+        "400":
+          description: Bad request - missing required fields
+        "401":
+          description: Invalid credentials
+        "404":
+          description: User not found
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token refreshed successfully
+
+  /api/v1/auth/verify:
+    post:
+      tags: [Auth]
+      summary: Verify JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Token is valid
+        "401":
+          description: Token is invalid or expired
+
+  /api/v1/restaurants:
+    get:
+      tags: [Restaurants]
+      summary: Get all restaurants
+      description: Retrieve a paginated list of restaurants with optional filters
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, pending]
+        - name: price_range
+          in: query
+          schema:
+            type: string
+            enum: [budget, mid-range, premium]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of restaurants
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestaurantListResponse"
+
+    post:
+      tags: [Restaurants]
+      summary: Create a new restaurant
+      security:
+        - bearerAuth: []
+      description: |
+        Requires restaurant_owner or admin role.
+        - Restaurant owners can create only ONE restaurant (will be automatically assigned as owner)
+        - Admins can create restaurants and optionally assign owner_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRestaurant"
+      responses:
+        "201":
+          description: Restaurant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Restaurant"
+        "403":
+          description: Access denied or restaurant owner already has a restaurant
+
+  /api/v1/restaurants/{id}:
+    get:
+      tags: [Restaurants]
+      summary: Get restaurant by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Restaurant details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Restaurant"
+        "404":
+          description: Restaurant not found
+
+    put:
+      tags: [Restaurants]
+      summary: Update restaurant
+      security:
+        - bearerAuth: []
+      description: Requires restaurant_owner or admin role.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRestaurant"
+      responses:
+        "200":
+          description: Restaurant updated successfully
+
+    delete:
+      tags: [Restaurants]
+      summary: Delete restaurant (admin only)
+      security:
+        - bearerAuth: []
+      description: Requires admin role.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Restaurant deleted successfully
+
+  /api/v1/restaurants/search:
+    get:
+      tags: [Restaurants]
+      summary: Search restaurants
+      parameters:
+        - name: keyword
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Restaurant"
+
+  /api/v1/restaurants/nearby:
+    get:
+      tags: [Restaurants]
+      summary: Get nearby restaurants
+      description: Get restaurants within a specified radius of a location
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+          description: Latitude
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+          description: Longitude
+        - name: radius
+          in: query
+          required: false
+          schema:
+            type: number
+            format: float
+            minimum: 0.1
+            maximum: 50
+          description: Radius in kilometers (default: 5km)
+      responses:
+        "200":
+          description: List of nearby restaurants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Restaurant"
+
+  /api/v1/restaurants/{id}/delivery-check:
+    get:
+      tags: [Restaurants]
+      summary: Check if address is within restaurant delivery zone
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+          description: Latitude
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+          description: Longitude
+      responses:
+        "200":
+          description: Delivery zone check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      is_deliverable:
+                        type: boolean
+                      distance:
+                        type: number
+                        description: Distance in kilometers
+                      message:
+                        type: string
+
+  /api/v1/restaurants/my/restaurant:
+    get:
+      tags: [Restaurants]
+      summary: Get my restaurant (for restaurant owners)
+      security:
+        - bearerAuth: []
+      description: Get the restaurant owned by the authenticated restaurant owner
+      responses:
+        "200":
+          description: Restaurant details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Restaurant"
+        "404":
+          description: Restaurant not found (owner has no restaurant yet)
+
+  /api/v1/restaurants/{id}/locations:
+    get:
+      tags: [Restaurants]
+      summary: Get restaurant locations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of locations
+
+    post:
+      tags: [Restaurants]
+      summary: Add location to restaurant
+      security:
+        - bearerAuth: []
+      description: Requires restaurant_owner or admin role. Restaurant owners can only add locations to their own restaurant.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLocation"
+      responses:
+        "201":
+          description: Location added successfully
+        "403":
+          description: Access denied
+
+  /api/v1/menu:
+    get:
+      tags: [Menu]
+      summary: Get all menu items
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: restaurant_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of menu items
+
+    post:
+      tags: [Menu]
+      summary: Create menu item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMenuItem"
+      responses:
+        "201":
+          description: Menu item created successfully
+
+  /api/v1/menu/{id}:
+    get:
+      tags: [Menu]
+      summary: Get menu item by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Menu item details
+
+    put:
+      tags: [Menu]
+      summary: Update menu item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMenuItem"
+      responses:
+        "200":
+          description: Menu item updated successfully
+
+    delete:
+      tags: [Menu]
+      summary: Delete menu item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Menu item deleted successfully
+
+  /api/v1/menu/restaurant/{restaurantId}:
+    get:
+      tags: [Menu]
+      summary: Get restaurant menu
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Restaurant menu
+
+  /api/v1/menu/search:
+    get:
+      tags: [Menu]
+      summary: Search menu items
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: restaurant_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Search results
+
+  /api/v1/categories:
+    get:
+      tags: [Categories]
+      summary: Get all categories
+      description: Retrieve categories with optional filters
+      parameters:
+        - name: restaurant_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: parent_category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+
+    post:
+      tags: [Categories]
+      summary: Create a new category
+      security:
+        - bearerAuth: []
+      description: Requires restaurant_owner or admin role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategory"
+      responses:
+        "201":
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Category"
+
+  /api/v1/categories/{id}:
+    get:
+      tags: [Categories]
+      summary: Get category by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/Category"
+
+    put:
+      tags: [Categories]
+      summary: Update category
+      security:
+        - bearerAuth: []
+      description: Requires restaurant_owner or admin role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategory"
+      responses:
+        "200":
+          description: Category updated successfully
+
+    delete:
+      tags: [Categories]
+      summary: Delete category
+      security:
+        - bearerAuth: []
+      description: Requires restaurant_owner or admin role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category deleted successfully
+
+  /api/v1/categories/restaurant/{restaurantId}:
+    get:
+      tags: [Categories]
+      summary: Get restaurant categories
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of restaurant categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+
+  /api/v1/categories/restaurant/{restaurantId}/tree:
+    get:
+      tags: [Categories]
+      summary: Get category tree for restaurant
+      description: Get hierarchical category structure for a restaurant
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category tree
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CategoryTree"
+
+  /api/v1/categories/restaurant/{restaurantId}/roots:
+    get:
+      tags: [Categories]
+      summary: Get root categories for restaurant
+      description: Get top-level categories (no parent) for a restaurant
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Root categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+
+  /api/v1/categories/parent/{parentId}/children:
+    get:
+      tags: [Categories]
+      summary: Get child categories
+      description: Get all child categories of a parent category
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Child categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: Get all users
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+    post:
+      tags: [Users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "201":
+          description: User created
+
+  /api/v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User data
+    put:
+      tags: [Users]
+      summary: Update user
+      security:
+        - bearerAuth: []
+      description: Users can update their own profile. Admins can update any user and change roles.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUser"
+      responses:
+        "200":
+          description: User updated
+        "403":
+          description: Access denied - can only update own profile unless admin
+    delete:
+      tags: [Users]
+      summary: Delete user (admin only)
+      security:
+        - bearerAuth: []
+      description: Requires admin role to delete users.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User deleted
+        "403":
+          description: Access denied - admin role required
+
+  /api/v1/orders:
+    post:
+      tags: [Orders]
+      summary: Create new order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrder"
+      responses:
+        "201":
+          description: Order created successfully
+
+  /api/v1/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Order details
+
+  /api/v1/orders/my-orders:
+    get:
+      tags: [Orders]
+      summary: Get user orders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User orders
+
+  /api/v1/orders/history:
+    get:
+      tags: [Orders]
+      summary: Get order history (MongoDB)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order history
+
+  /api/v1/orders/restaurant/{restaurantId}/history:
+    get:
+      tags: [Orders]
+      summary: Get restaurant order history
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Restaurant order history
+
+  /api/v1/orders/{id}/status:
+    patch:
+      tags: [Orders]
+      summary: Update order status
+      security:
+        - bearerAuth: []
+      description: Requires restaurant_owner or admin role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, confirmed, preparing, ready, delivered, cancelled]
+      responses:
+        "200":
+          description: Order status updated
+
+  /api/v1/orders/{id}/items:
+    get:
+      tags: [Orders]
+      summary: Get order items
+      description: Get all items in an order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Order items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrderItem"
+
+  /api/v1/images/upload:
+    post:
+      tags: [Images]
+      summary: Upload single image
+      security:
+        - bearerAuth: []
+      description: Upload a single image file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Image uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+                      filename:
+                        type: string
+
+  /api/v1/images/upload/multiple:
+    post:
+      tags: [Images]
+      summary: Upload multiple images
+      security:
+        - bearerAuth: []
+      description: Upload multiple image files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          description: Images uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        url:
+                          type: string
+                          format: uri
+                        filename:
+                          type: string
+
+  /api/v1/images/upload/base64:
+    post:
+      tags: [Images]
+      summary: Upload image from base64
+      security:
+        - bearerAuth: []
+      description: Upload an image from a base64 encoded string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  description: Base64 encoded image data
+                name:
+                  type: string
+                  description: Optional filename
+      responses:
+        "200":
+          description: Image uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+                      filename:
+                        type: string
+
+  /api/v1/mongodb/stats:
+    get:
+      tags: [Admin]
+      summary: Get MongoDB database statistics
+      security:
+        - bearerAuth: []
+      description: Get database statistics (admin only)
+      responses:
+        "200":
+          description: Database statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      collections:
+                        type: integer
+                      documents:
+                        type: integer
+                      storage:
+                        type: object
+
+  /api/v1/mongodb/order-history/stats:
+    get:
+      tags: [Admin]
+      summary: Get order history statistics
+      security:
+        - bearerAuth: []
+      description: Get order history statistics for the authenticated user or a specific restaurant
+      parameters:
+        - name: restaurant_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Order history statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      total_orders:
+                        type: integer
+                      total_revenue:
+                        type: number
+                      average_order_value:
+                        type: number
+
+  /api/v1/mongodb/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Get audit log summary
+      security:
+        - bearerAuth: []
+      description: Get audit log summary (admin only)
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Audit log summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /api/v1/mongodb/system-logs:
+    get:
+      tags: [Admin]
+      summary: Get system log summary
+      security:
+        - bearerAuth: []
+      description: Get system log summary (admin only)
+      parameters:
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [info, warn, error, debug]
+      responses:
+        "200":
+          description: System log summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Restaurant:
+      type: object
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: object
+        founded_year:
+          type: integer
+        country:
+          type: string
+        price_range:
+          type: string
+          enum: [budget, mid-range, premium]
+        categories:
+          type: array
+          items:
+            type: string
+        specialties:
+          type: array
+          items:
+            type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        food_categories:
+          type: array
+          items:
+            type: string
+        logo_url:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive, pending]
+        owner_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: UUID of the restaurant owner (restaurant_owner role user)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateRestaurant:
+      type: object
+      required:
+        - name
+        - country
+        - price_range
+        - categories
+        - specialties
+        - keywords
+      properties:
+        name:
+          type: string
+        description:
+          type: object
+        founded_year:
+          type: integer
+        country:
+          type: string
+        price_range:
+          type: string
+          enum: [budget, mid-range, premium]
+        categories:
+          type: array
+          items:
+            type: string
+        specialties:
+          type: array
+          items:
+            type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        food_categories:
+          type: array
+          items:
+            type: string
+        logo_url:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional. For admins to assign owner. Restaurant owners cannot set this - it's automatically set to their user_id.
+
+    UpdateRestaurant:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: object
+        price_range:
+          type: string
+          enum: [budget, mid-range, premium]
+        status:
+          type: string
+          enum: [active, inactive, pending]
+
+    RestaurantListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            restaurants:
+              type: array
+              items:
+                $ref: "#/components/schemas/Restaurant"
+            pagination:
+              $ref: "#/components/schemas/Pagination"
+
+    CreateLocation:
+      type: object
+      required:
+        - city
+        - area
+        - address
+      properties:
+        city:
+          type: string
+        area:
+          type: string
+        address:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        phone:
+          type: string
+        operating_hours:
+          type: object
+        delivery_zones:
+          type: object
+
+    MenuItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        base_price:
+          type: number
+        currency:
+          type: string
+        image_urls:
+          type: array
+          items:
+            type: string
+        dietary_tags:
+          type: array
+          items:
+            type: string
+        spice_level:
+          type: string
+          enum: [mild, medium, hot, extra-hot]
+        preparation_time:
+          type: integer
+        calories:
+          type: integer
+        ingredients:
+          type: array
+          items:
+            type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        is_available:
+          type: boolean
+        is_featured:
+          type: boolean
+
+    CreateMenuItem:
+      type: object
+      required:
+        - restaurant_id
+        - category_id
+        - name
+        - description
+        - base_price
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        base_price:
+          type: number
+        currency:
+          type: string
+        image_urls:
+          type: array
+          items:
+            type: string
+        dietary_tags:
+          type: array
+          items:
+            type: string
+        spice_level:
+          type: string
+          enum: [mild, medium, hot, extra-hot]
+        preparation_time:
+          type: integer
+        calories:
+          type: integer
+        ingredients:
+          type: array
+          items:
+            type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        is_available:
+          type: boolean
+        is_featured:
+          type: boolean
+
+    UpdateMenuItem:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        base_price:
+          type: number
+        is_available:
+          type: boolean
+        is_featured:
+          type: boolean
+
+    CreateOrder:
+      type: object
+      required:
+        - restaurant_id
+        - location_id
+        - order_type
+        - items
+        - phone
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        order_type:
+          type: string
+          enum: [voice, app, web, phone]
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              item_id:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+              variants:
+                type: object
+              special_instructions:
+                type: string
+        delivery_address:
+          type: string
+        phone:
+          type: string
+        special_instructions:
+          type: string
+        voice_transcript:
+          type: string
+
+    Order:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        restaurant_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        order_type:
+          type: string
+          enum: [voice, app, web, phone]
+        order_status:
+          type: string
+          enum: [pending, confirmed, preparing, ready, delivered, cancelled]
+        items:
+          type: array
+        subtotal:
+          type: number
+        tax_amount:
+          type: number
+        delivery_fee:
+          type: number
+        discount_amount:
+          type: number
+        total_amount:
+          type: number
+        currency:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        name:
+          type: string
+        role:
+          type: string
+          enum: [customer, restaurant_owner, admin]
+          default: customer
+          description: User role - customer, restaurant_owner, or admin
+        preferred_language:
+          type: string
+          enum: [en, ur]
+        favorite_restaurants:
+          type: array
+          items:
+            type: string
+            format: uuid
+        dietary_preferences:
+          type: array
+          items:
+            type: string
+        addresses:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum: [home, work, other]
+              label:
+                type: string
+              street:
+                type: string
+              area:
+                type: string
+              city:
+                type: string
+              province:
+                type: string
+              postal_code:
+                type: string
+              country:
+                type: string
+              lat:
+                type: number
+                format: double
+              lng:
+                type: number
+                format: double
+              address:
+                type: string
+              is_default:
+                type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_active_at:
+          type: string
+          format: date-time
+
+    CreateUser:
+      type: object
+      required:
+        - name
+        - preferred_language
+      properties:
+        name:
+          type: string
+          example: "John Doe"
+        preferred_language:
+          type: string
+          enum: [en, ur]
+          example: "en"
+        role:
+          type: string
+          enum: [customer, restaurant_owner, admin]
+          default: customer
+          example: "customer"
+          description: User role - defaults to 'customer' if not provided
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: "john@example.com"
+        phone:
+          type: string
+          nullable: true
+          example: "+1234567890"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          description: User password (minimum 6 characters). Will be hashed before storage.
+          example: "securepassword123"
+        favorite_restaurants:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example: []
+        dietary_preferences:
+          type: array
+          items:
+            type: string
+          example: ["vegetarian", "halal"]
+        addresses:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Unique identifier for the address
+              type:
+                type: string
+                enum: [home, work, other]
+                description: Address type
+              label:
+                type: string
+                description: Address label (e.g., "Home", "Office")
+              street:
+                type: string
+                description: Street address or house number
+              area:
+                type: string
+                description: Area or sector
+              city:
+                type: string
+                description: City name
+              province:
+                type: string
+                description: Province or state
+              postal_code:
+                type: string
+                description: Postal or zip code
+              country:
+                type: string
+                description: Country name
+              lat:
+                type: number
+                format: double
+                description: Latitude coordinate
+                example: 31.5497
+              lng:
+                type: number
+                format: double
+                description: Longitude coordinate
+                example: 74.3436
+              address:
+                type: string
+                description: Full formatted address string
+              is_default:
+                type: boolean
+                description: Whether this is the default address
+                default: false
+          example:
+            - id: addr-1
+              type: home
+              label: Home
+              street: 123 Main St
+              area: Gulberg
+              city: Lahore
+              province: Punjab
+              postal_code: "54000"
+              country: Pakistan
+              lat: 31.5497
+              lng: 74.3436
+              address: 123 Main St, Gulberg, Lahore, Punjab, Pakistan
+              is_default: true
+
+    UpdateUser:
+      type: object
+      properties:
+        name:
+          type: string
+        preferred_language:
+          type: string
+          enum: [en, ur]
+        role:
+          type: string
+          enum: [customer, restaurant_owner, admin]
+          description: Update user role
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        favorite_restaurants:
+          type: array
+          items:
+            type: string
+            format: uuid
+        dietary_preferences:
+          type: array
+          items:
+            type: string
+        addresses:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum: [home, work, other]
+              label:
+                type: string
+              street:
+                type: string
+              area:
+                type: string
+              city:
+                type: string
+              province:
+                type: string
+              postal_code:
+                type: string
+              country:
+                type: string
+              lat:
+                type: number
+                format: double
+              lng:
+                type: number
+                format: double
+              address:
+                type: string
+              is_default:
+                type: boolean
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        message:
+          type: string
+        error:
+          type: string
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+
+    Category:
+      type: object
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        parent_category_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+        display_order:
+          type: integer
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCategory:
+      type: object
+      required:
+        - restaurant_id
+        - name
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        parent_category_id:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        image_url:
+          type: string
+          format: uri
+        display_order:
+          type: integer
+        is_active:
+          type: boolean
+          default: true
+
+    UpdateCategory:
+      type: object
+      properties:
+        name:
+          type: string
+        parent_category_id:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        image_url:
+          type: string
+          format: uri
+        display_order:
+          type: integer
+        is_active:
+          type: boolean
+
+    CategoryTree:
+      type: object
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryTree"
+
+    OrderItem:
+      type: object
+      properties:
+        order_item_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        unit_price:
+          type: number
+        subtotal:
+          type: number
+        variants:
+          type: object
+        special_instructions:
+          type: string
+          nullable: true

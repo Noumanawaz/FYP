@@ -1,0 +1,146 @@
+{
+  "brand": {
+    "name": "KFC",
+    "country": "Pakistan",
+    "founded": "1997",
+    "description": "KFC (Kentucky Fried Chicken) is a global fast-food chain specializing in fried chicken, burgers, and sides. Known for its secret blend of 11 herbs and spices, serving crispy fried chicken and delicious meals.",
+    "usp": [
+      "Original fried chicken recipe",
+      "Secret blend of 11 herbs and spices",
+      "Crispy chicken coating",
+      "Family meal deals"
+    ]
+  },
+
+  "ordering": {
+    "app": {
+      "ios": {
+        "rating": "4.3/5",
+        "reviews": "1.8K+",
+        "last_updated": "Aug 21, 2025",
+        "link": "https://apps.apple.com/us/app/kfc-pakistan/id9876543210"
+      },
+      "android": {
+        "rating": "4.4/5",
+        "reviews": "38K+",
+        "last_updated": "Aug 19, 2025",
+        "link": "https://play.google.com/store/apps/details?id=com.kfc.pk"
+      }
+    },
+    "channels": [
+      "KFC App",
+      "Official Website",
+      "Phone Order",
+      "Delivery Partners (FoodPanda, etc.)"
+    ],
+    "features": [
+      "Chicken tracker",
+      "Family meal builder",
+      "KFC rewards",
+      "Express delivery"
+    ]
+  },
+
+  "branches": {
+    "cities": [
+      "Karachi",
+      "Lahore",
+      "Islamabad",
+      "Rawalpindi",
+      "Faisalabad",
+      "Multan",
+      "Peshawar",
+      "Quetta",
+      "Sialkot",
+      "Gujranwala",
+      "Hyderabad",
+      "Sukkur"
+    ],
+    "hours": "10 AM – 2 AM (most branches)",
+    "total_branches": "80+"
+  },
+
+  "menu": {
+    "chicken": {
+      "original_recipe": [
+        { "name": "2 Piece Chicken", "price": "Rs. 650", "description": "2 pieces of original recipe chicken" },
+        { "name": "4 Piece Chicken", "price": "Rs. 1,200", "description": "4 pieces of original recipe chicken" },
+        { "name": "6 Piece Chicken", "price": "Rs. 1,800", "description": "6 pieces of original recipe chicken" },
+        { "name": "8 Piece Chicken", "price": "Rs. 2,400", "description": "8 pieces of original recipe chicken" },
+        { "name": "12 Piece Chicken", "price": "Rs. 3,500", "description": "12 pieces of original recipe chicken" }
+      ],
+      "crispy_strips": [
+        { "name": "2 Strips", "price": "Rs. 450", "description": "2 crispy chicken strips" },
+        { "name": "3 Strips", "price": "Rs. 650", "description": "3 crispy chicken strips" },
+        { "name": "5 Strips", "price": "Rs. 1,000", "description": "5 crispy chicken strips" },
+        { "name": "8 Strips", "price": "Rs. 1,500", "description": "8 crispy chicken strips" }
+      ],
+      "wings": [
+        { "name": "6 Wings", "price": "Rs. 800", "description": "6 crispy chicken wings" },
+        { "name": "8 Wings", "price": "Rs. 1,050", "description": "8 crispy chicken wings" },
+        { "name": "12 Wings", "price": "Rs. 1,500", "description": "12 crispy chicken wings" }
+      ]
+    },
+
+    "burgers": [
+      { "name": "Zinger Burger", "price": "Rs. 750", "description": "Spicy chicken fillet with lettuce and mayo" },
+      { "name": "Zinger Stacker", "price": "Rs. 950", "description": "Double spicy chicken fillet with cheese" },
+      { "name": "Chicken Burger", "price": "Rs. 550", "description": "Classic chicken burger with lettuce" },
+      { "name": "Crispy Burger", "price": "Rs. 650", "description": "Crispy chicken fillet with special sauce" },
+      { "name": "Veggie Burger", "price": "Rs. 450", "description": "Vegetarian patty with fresh vegetables" }
+    ],
+
+    "rice_meals": [
+      { "name": "Chicken Rice Bowl", "price": "Rs. 850", "description": "Chicken pieces with steamed rice" },
+      { "name": "Chicken Biryani", "price": "Rs. 950", "description": "Spicy chicken biryani with raita" },
+      { "name": "Chicken Fried Rice", "price": "Rs. 750", "description": "Chicken fried rice with vegetables" }
+    ],
+
+    "sides": [
+      { "name": "French Fries", "price": "Rs. 350" },
+      { "name": "Potato Wedges", "price": "Rs. 400" },
+      { "name": "Coleslaw", "price": "Rs. 250" },
+      { "name": "Mashed Potatoes", "price": "Rs. 300" },
+      { "name": "Corn on the Cob", "price": "Rs. 200" },
+      { "name": "Baked Beans", "price": "Rs. 250" }
+    ],
+
+    "beverages": [
+      { "name": "Pepsi", "price": "Rs. 120" },
+      { "name": "Mirinda", "price": "Rs. 120" },
+      { "name": "7UP", "price": "Rs. 120" },
+      { "name": "Mineral Water", "price": "Rs. 80" },
+      { "name": "Hot Tea", "price": "Rs. 100" },
+      { "name": "Coffee", "price": "Rs. 150" }
+    ],
+
+    "desserts": [
+      { "name": "Chocolate Sundae", "price": "Rs. 300" },
+      { "name": "Vanilla Sundae", "price": "Rs. 250" },
+      { "name": "Chocolate Cake", "price": "Rs. 350" },
+      { "name": "Ice Cream Cone", "price": "Rs. 200" }
+    ],
+
+    "deals": {
+      "family_meals": [
+        { "name": "Family Feast", "price": "Rs. 2,500", "description": "8 pieces chicken + 4 sides + 4 drinks" },
+        { "name": "Party Bucket", "price": "Rs. 3,500", "description": "12 pieces chicken + 6 sides + 6 drinks" },
+        { "name": "Mega Bucket", "price": "Rs. 4,500", "description": "16 pieces chicken + 8 sides + 8 drinks" }
+      ],
+      "lunch_deals": [
+        { "name": "Lunch Special", "price": "Rs. 800", "description": "2 pieces chicken + fries + drink" },
+        { "name": "Student Deal", "price": "Rs. 600", "description": "1 piece chicken + fries + drink" },
+        { "name": "Office Lunch", "price": "Rs. 1,200", "description": "3 pieces chicken + 2 sides + drink" }
+      ],
+      "midnight_deals": [
+        { "name": "Midnight Munch", "price": "Rs. 1,500", "description": "6 pieces chicken + 3 sides + 3 drinks" },
+        { "name": "Late Night Special", "price": "Rs. 2,000", "description": "8 pieces chicken + 4 sides + 4 drinks" }
+      ]
+    }
+  },
+
+  "extra": {
+    "dietary": ["Halal meat", "Vegetarian options available"],
+    "sustainability": ["Recyclable packaging", "Local ingredient sourcing"]
+  }
+}

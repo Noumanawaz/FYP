@@ -1,0 +1,140 @@
+{
+  "brand": {
+    "name": "Pizza Hut",
+    "country": "Pakistan",
+    "founded": "1993",
+    "description": "Pizza Hut is a global pizza restaurant chain known for its pan pizzas, stuffed crust, and wide variety of toppings. Serving delicious pizzas with quality ingredients and innovative recipes.",
+    "usp": [
+      "World-famous pan pizzas",
+      "Stuffed crust options",
+      "Global quality standards",
+      "Innovative pizza flavors"
+    ]
+  },
+
+  "ordering": {
+    "app": {
+      "ios": {
+        "rating": "4.5/5",
+        "reviews": "2.1K+",
+        "last_updated": "Aug 22, 2025",
+        "link": "https://apps.apple.com/us/app/pizza-hut-pakistan/id1234567890"
+      },
+      "android": {
+        "rating": "4.6/5",
+        "reviews": "45K+",
+        "last_updated": "Aug 20, 2025",
+        "link": "https://play.google.com/store/apps/details?id=com.pizzahut.pk"
+      }
+    },
+    "channels": [
+      "Pizza Hut App",
+      "Official Website",
+      "Phone Order",
+      "Delivery Partners (FoodPanda, etc.)"
+    ],
+    "features": [
+      "Pizza tracker",
+      "Customizable toppings",
+      "Loyalty rewards",
+      "Contactless delivery"
+    ]
+  },
+
+  "branches": {
+    "cities": [
+      "Karachi",
+      "Lahore",
+      "Islamabad",
+      "Rawalpindi",
+      "Faisalabad",
+      "Multan",
+      "Peshawar",
+      "Quetta",
+      "Sialkot",
+      "Gujranwala"
+    ],
+    "hours": "11 AM – 12 AM (most branches)",
+    "total_branches": "50+"
+  },
+
+  "menu": {
+    "starters": [
+      { "name": "Garlic Bread", "price": "Rs. 450", "description": "Fresh baked bread with garlic butter and herbs" },
+      { "name": "Chicken Wings", "price": "Rs. 850", "description": "Crispy wings with choice of sauce" },
+      { "name": "Mozzarella Sticks", "price": "Rs. 650", "description": "Breaded mozzarella cheese sticks" },
+      { "name": "Potato Wedges", "price": "Rs. 550", "description": "Seasoned potato wedges with dip" },
+      { "name": "Chicken Popcorn", "price": "Rs. 750", "description": "Bite-sized chicken pieces" }
+    ],
+
+    "pizzas": {
+      "classic": [
+        { "name": "Margherita", "price": "From Rs. 1,200", "description": "Classic tomato sauce with mozzarella cheese" },
+        { "name": "Pepperoni", "price": "From Rs. 1,400", "description": "Spicy pepperoni with cheese" },
+        { "name": "BBQ Chicken", "price": "From Rs. 1,500", "description": "BBQ sauce with grilled chicken" },
+        { "name": "Supreme", "price": "From Rs. 1,600", "description": "Pepperoni, sausage, mushrooms, peppers, onions" },
+        { "name": "Hawaiian", "price": "From Rs. 1,300", "description": "Ham and pineapple with cheese" },
+        { "name": "Veggie Delight", "price": "From Rs. 1,200", "description": "Mixed vegetables with cheese" }
+      ],
+      "premium": [
+        { "name": "Meat Lovers", "price": "From Rs. 1,800", "description": "Pepperoni, sausage, bacon, ham" },
+        { "name": "Chicken Tikka", "price": "From Rs. 1,500", "description": "Spicy chicken tikka with onions" },
+        { "name": "BBQ Beef", "price": "From Rs. 1,700", "description": "BBQ sauce with beef and onions" },
+        { "name": "Four Cheese", "price": "From Rs. 1,400", "description": "Mozzarella, cheddar, parmesan, feta" },
+        { "name": "Buffalo Chicken", "price": "From Rs. 1,600", "description": "Buffalo sauce with chicken" }
+      ],
+      "specialty": [
+        { "name": "Stuffed Crust Supreme", "price": "From Rs. 2,200", "description": "Supreme toppings with cheese-stuffed crust" },
+        { "name": "Pan Pizza Special", "price": "From Rs. 2,000", "description": "Thick pan crust with premium toppings" },
+        { "name": "Thin Crust Deluxe", "price": "From Rs. 1,800", "description": "Crispy thin crust with fresh toppings" },
+        { "name": "Pizza Hut Special", "price": "From Rs. 2,500", "description": "Our signature pizza with all premium toppings" }
+      ]
+    },
+
+    "pasta": [
+      { "name": "Spaghetti Marinara", "price": "Rs. 950", "description": "Classic tomato sauce with herbs" },
+      { "name": "Fettuccine Alfredo", "price": "Rs. 1,100", "description": "Creamy alfredo sauce with parmesan" },
+      { "name": "Chicken Pasta", "price": "Rs. 1,200", "description": "Grilled chicken with creamy sauce" },
+      { "name": "Seafood Pasta", "price": "Rs. 1,400", "description": "Mixed seafood with tomato sauce" }
+    ],
+
+    "sides": [
+      { "name": "French Fries", "price": "Rs. 450" },
+      { "name": "Onion Rings", "price": "Rs. 550" },
+      { "name": "Coleslaw", "price": "Rs. 300" },
+      { "name": "Caesar Salad", "price": "Rs. 650" },
+      { "name": "Chicken Salad", "price": "Rs. 750" }
+    ],
+
+    "beverages": [
+      { "name": "Pepsi", "price": "Rs. 150" },
+      { "name": "Mirinda", "price": "Rs. 150" },
+      { "name": "7UP", "price": "Rs. 150" },
+      { "name": "Mineral Water", "price": "Rs. 100" },
+      { "name": "Fresh Juice", "price": "Rs. 200" }
+    ],
+
+    "desserts": [
+      { "name": "Chocolate Lava Cake", "price": "Rs. 450" },
+      { "name": "Ice Cream Sundae", "price": "Rs. 350" },
+      { "name": "Tiramisu", "price": "Rs. 550" },
+      { "name": "Cheesecake", "price": "Rs. 400" }
+    ],
+
+    "deals": {
+      "family_deals": [
+        { "name": "Family Feast", "price": "Rs. 3,500", "description": "2 large pizzas + 2 sides + 2 drinks" },
+        { "name": "Party Pack", "price": "Rs. 4,500", "description": "3 large pizzas + 3 sides + 3 drinks" }
+      ],
+      "lunch_deals": [
+        { "name": "Lunch Special", "price": "Rs. 1,200", "description": "Medium pizza + side + drink" },
+        { "name": "Student Deal", "price": "Rs. 950", "description": "Small pizza + fries + drink" }
+      ]
+    }
+  },
+
+  "extra": {
+    "dietary": ["Halal meat", "Vegetarian options", "Gluten-free crust available"],
+    "sustainability": ["Recyclable packaging", "Local ingredient sourcing"]
+  }
+}
