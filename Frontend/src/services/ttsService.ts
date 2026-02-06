@@ -12,10 +12,11 @@ export interface UpliftTTSResult {
  * @returns Promise that resolves when audio playback starts
  */
 export async function speakWithUplift(
-  text: string, 
-  voiceId: string = "v_8eelc901"
+  text: string,
+  voiceId: string = "v_8eelc901",
+  apiKey?: string
 ): Promise<UpliftTTSResult> {
-  const keyToUse = getEnvVar('VITE_UPLIFT_API_KEY', '');
+  const keyToUse = apiKey || getEnvVar('VITE_UPLIFT_API_KEY', '');
 
   if (!keyToUse) {
     throw new Error("Uplift AI API key missing. Set VITE_UPLIFT_API_KEY in your env.");
@@ -44,16 +45,16 @@ export async function speakWithUplift(
   const audioDuration = audioDurationHeader ? parseFloat(audioDurationHeader) : undefined;
 
   const audioBlob = await response.blob();
-  
+
   // Play the audio
   const audioUrl = URL.createObjectURL(audioBlob);
   const audio = new Audio(audioUrl);
-  
+
   // Clean up the object URL after playback ends
   audio.addEventListener('ended', () => {
     URL.revokeObjectURL(audioUrl);
   }, { once: true });
-  
+
   await audio.play().catch(() => {
     // Clean up on play error
     URL.revokeObjectURL(audioUrl);

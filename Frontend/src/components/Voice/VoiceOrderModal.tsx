@@ -26,14 +26,14 @@ interface VoiceOrderModalProps {
 const getChatbotBaseUrl = (): string => {
   const ragUrl = getEnvVar('VITE_RAG_BASE_URL', '');
   if (ragUrl) return ragUrl;
-  
+
   // Fallback: try to derive from API base URL (remove /api/v1 if present)
   const apiUrl = getEnvVar('VITE_API_BASE_URL', '');
   if (apiUrl) {
     // Remove /api/v1 suffix if present, or use as-is
     return apiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
   }
-  
+
   // Final fallback
   return 'http://localhost:8000';
 };
@@ -49,6 +49,7 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const chatbotServiceRef = useRef<ChatbotService>(new ChatbotService());
+  const isSpeakingRef = useRef<boolean>(false);
 
   // Helper to get voices, waiting for them to load if necessary
   const getVoices = (): Promise<SpeechSynthesisVoice[]> => {
@@ -74,29 +75,38 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   };
 
   // TTS helper (prefer Uplift; fallback to browser speechSynthesis). Show EN, speak UR.
+  // TTS (prefer Uplift, fallback to browser TTS). Auto-pick voice by text script.
   const speak = async (text: string) => {
     try {
       if (isListening) {
         try {
           stopListening();
           console.info("[OrderModal][TTS] stopped listening before playback");
-        } catch {}
+        } catch { }
       }
-      const isUrdu = /[\u0600-\u06FF]/.test(text);
-      console.info("[OrderModal][TTS] starting", { isUrdu });
-      
+
+      // Check if text has Urdu logical characters (Arabic script)
+      const isUrduScript = /[\u0600-\u06FF]/.test(text);
+      console.info("[OrderModal][TTS] starting", { textPreview: text.substring(0, 20), isUrduScript });
+
       // Check if Uplift API key is available before attempting to use it
-      const upliftApiKey = getEnvVar('VITE_UPLIFT_API_KEY', '');
-      console.info("[OrderModal][TTS] Uplift API key check", { 
-        hasKey: !!upliftApiKey, 
+      // Note: Values from import.meta.env are statically replaced at build time, 
+      // but getEnvVar helps with runtime/testing fallback.
+      const upliftApiKey = (import.meta as any).env?.VITE_UPLIFT_API_KEY || getEnvVar('VITE_UPLIFT_API_KEY', '');
+
+      console.info("[OrderModal][TTS] Uplift API key check", {
+        hasKey: !!upliftApiKey,
         keyLength: upliftApiKey?.length || 0,
-        keyPrefix: upliftApiKey?.substring(0, 7) || 'none'
+        keyPrefix: upliftApiKey?.substring(0, 7) || 'none',
+        fromMeta: !!(import.meta as any).env?.VITE_UPLIFT_API_KEY,
+        fromGetEnv: !!getEnvVar('VITE_UPLIFT_API_KEY', '')
       });
+
       if (upliftApiKey) {
         try {
           const urduVoiceId = getEnvVar('VITE_UPLIFT_VOICE_UR', 'v_8eelc901');
           const englishVoiceId = getEnvVar('VITE_UPLIFT_VOICE_EN', 'v_8eelc901');
-          await speakWithUplift(text, isUrdu ? urduVoiceId : englishVoiceId);
+          await speakWithUplift(text, isUrduScript ? urduVoiceId : englishVoiceId, upliftApiKey);
           console.info("[OrderModal][TTS] Uplift playback queued");
           return;
         } catch (e) {
@@ -110,40 +120,53 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
         console.warn("[OrderModal][TTS] speechSynthesis not available");
         return;
       }
+
+      // Cancel any current speech
+      window.speechSynthesis.cancel();
+
       const utter = new SpeechSynthesisUtterance(text);
       utter.rate = 1.0;
       utter.pitch = 1.0;
       utter.volume = 1.0;
-      
+
       const voices = await getVoices();
-      let preferred: SpeechSynthesisVoice | null = null;
-      
-      if (voices.length > 0) {
-        if (isUrdu) {
-          preferred = voices.find((v) => /^(ur|ar|fa|ps|pa|hi)/i.test(v.lang)) || null;
-          utter.lang = preferred?.lang || "ur-PK";
-        } else {
-          preferred = voices.find((v) => /en-|en_/i.test(v.lang)) || null;
-          utter.lang = preferred?.lang || "en-US";
-        }
-        
-        if (preferred) {
-          utter.voice = preferred;
-        }
-      } else {
-        // No voices available, just set language
-        utter.lang = isUrdu ? "ur-PK" : "en-US";
+      let selectedVoice = null;
+
+      if (isUrduScript) {
+        // Try to find Urdu or Arabic voice
+        selectedVoice = voices.find(v => v.lang.includes('ur') || v.lang.includes('ar'));
       }
-      
-      console.info("[OrderModal][TTS] Browser TTS", { 
-        selectedLang: utter.lang, 
-        voice: preferred?.name || "default",
-        voiceCount: voices.length 
+
+      // If no Urdu voice or not Urdu script, try to find a natural sounding English voice or fallback
+      if (!selectedVoice) {
+        // Google voices often sound better
+        selectedVoice = voices.find(v => v.name.includes("Google") && v.lang.includes("en")) ||
+          voices.find(v => v.lang.includes("en-US")) ||
+          voices[0];
+      }
+
+      if (selectedVoice) {
+        utter.voice = selectedVoice;
+        utter.lang = selectedVoice.lang;
+      }
+
+      console.info("[OrderModal][TTS] Browser TTS", {
+        selectedLang: utter.lang,
+        voice: selectedVoice?.name || "default",
+        voiceCount: voices.length
       });
-      
-      try {
-        window.speechSynthesis.cancel();
-      } catch {}
+
+      isSpeakingRef.current = true;
+      utter.onend = () => {
+        isSpeakingRef.current = false;
+        console.log("[OrderModal][TTS] playback ended");
+      };
+
+      utter.onerror = (e) => {
+        console.error("[OrderModal][TTS] playback error", e);
+        isSpeakingRef.current = false;
+      };
+
       try {
         window.speechSynthesis.speak(utter);
         console.info("[OrderModal][TTS] Browser playback queued");

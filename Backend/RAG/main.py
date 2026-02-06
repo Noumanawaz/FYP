@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 
 from utils.rag_system import MultiRestaurantRAGSystem
 from services.llm_service import GroqLLMService
+from services.orchestrator_service import OrchestratorService
+from services.basic_handler import BasicHandler
+from services.order_handler import OrderHandler
 
 load_dotenv()
 
@@ -29,6 +32,9 @@ app.add_middleware(
 # Initialize services
 rag_system = None
 llm_service = None
+orchestrator_service = None
+basic_handler = None
+order_handler = None
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -78,7 +84,7 @@ class RestaurantInfo(BaseModel):
 # Startup event
 @app.on_event("startup")
 async def startup_event():
-    global rag_system, llm_service
+    global rag_system, llm_service, orchestrator_service, basic_handler, order_handler
     
     print("🚀 Starting Multi-Restaurant RAG Voice Assistant...")
     
@@ -94,6 +100,12 @@ async def startup_event():
         # Initialize LLM service (Groq)
         llm_service = GroqLLMService()
         print("✅ LLM service initialized")
+
+        # Initialize Orchestrator and Handlers
+        orchestrator_service = OrchestratorService(llm_service)
+        basic_handler = BasicHandler()
+        order_handler = OrderHandler()
+        print("✅ Orchestrator system initialized")
         
         print(f"🎯 Available restaurants: {[r['name'] for r in rag_system.get_available_restaurants()]}")
         
@@ -173,7 +185,36 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail="Services not initialized")
     
     try:
-        # Process query with the new multi-restaurant system
+
+        # Orchestrate the query
+        query_type = orchestrator_service.classify_query(request.message)
+        print(f"🧠 Query classified as: {query_type}")
+
+        if query_type == "greeting":
+            handler_response = basic_handler.handle(request.message)
+            return ChatResponse(
+                response=handler_response["response"],
+                response_en=handler_response["response_en"],
+                response_ur=handler_response["response_ur"],
+                restaurant_name="Vocabite Assistant",
+                confidence=1.0,
+                suggestions=[],
+                response_type="greeting"
+            )
+
+        elif query_type == "order":
+            handler_response = order_handler.handle(request.message)
+            return ChatResponse(
+                response=handler_response["response"],
+                response_en=handler_response["response_en"],
+                response_ur=handler_response["response_ur"],
+                restaurant_name="Vocabite Assistant",
+                confidence=1.0,
+                suggestions=handler_response.get("suggestions", []),
+                response_type="order_placeholder"
+            )
+
+        # Process query with the new multi-restaurant system (Complex/RAG)
         rag_result = rag_system.process_query(request.message)
         
         # Log context retrieval for debugging
@@ -185,7 +226,7 @@ async def chat(request: ChatRequest):
         
         # Build prompt for LLM
         detected_restaurants = rag_result.get('detected_restaurants', [])
-        query_type = rag_result.get('query_type', 'general')
+        query_type_rag = rag_result.get('query_type', 'general') # renamed to avoid conflict
         
         # Generate English response with context
         llm_response_en = llm_service.generate_response(
@@ -285,6 +326,40 @@ async def websocket_endpoint(websocket: WebSocket):
             if message_data.get("type") == "chat":
                 user_message = message_data.get("message", "")
                 
+                # Orchestrate the query
+                query_type = orchestrator_service.classify_query(user_message)
+                print(f"🧠 [WS] Query classified as: {query_type}")
+
+                if query_type == "greeting":
+                    handler_response = basic_handler.handle(user_message)
+                    response_data = {
+                        "type": "chat_response",
+                        "response": handler_response["response"],
+                        "response_en": handler_response["response_en"],
+                        "response_ur": handler_response["response_ur"],
+                        "restaurant_name": "Vocabite Assistant",
+                        "confidence": 1.0,
+                        "suggestions": [],
+                        "response_type": "greeting"
+                    }
+                    await websocket.send_text(json.dumps(response_data))
+                    continue # Skip RAG
+
+                elif query_type == "order":
+                    handler_response = order_handler.handle(user_message)
+                    response_data = {
+                        "type": "chat_response",
+                        "response": handler_response["response"],
+                        "response_en": handler_response["response_en"],
+                        "response_ur": handler_response["response_ur"],
+                        "restaurant_name": "Vocabite Assistant",
+                        "confidence": 1.0,
+                        "suggestions": handler_response.get("suggestions", []),
+                        "response_type": "order_placeholder"
+                    }
+                    await websocket.send_text(json.dumps(response_data))
+                    continue # Skip RAG
+
                 # Process with RAG system
                 rag_result = rag_system.process_query(user_message)
                 
@@ -294,7 +369,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 # Build prompt for LLM
                 detected_restaurants = rag_result.get('detected_restaurants', [])
-                query_type = rag_result.get('query_type', 'general')
+                query_type_rag = rag_result.get('query_type', 'general')
                 
                 # Generate English response with context
                 llm_response_en = llm_service.generate_response(

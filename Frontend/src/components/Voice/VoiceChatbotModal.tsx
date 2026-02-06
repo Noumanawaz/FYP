@@ -15,14 +15,14 @@ interface VoiceChatbotModalProps {
 const getChatbotBaseUrl = (): string => {
   const ragUrl = getEnvVar('VITE_RAG_BASE_URL', '');
   if (ragUrl) return ragUrl;
-  
+
   // Fallback: try to derive from API base URL (remove /api/v1 if present)
   const apiUrl = getEnvVar('VITE_API_BASE_URL', '');
   if (apiUrl) {
     // Remove /api/v1 suffix if present, or use as-is
     return apiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
   }
-  
+
   // Final fallback
   return 'http://localhost:8000';
 };
@@ -78,17 +78,32 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
         const payload = JSON.parse(evt.data);
         if (payload.type === "chat_response" && payload.response) {
           const displayText = payload.response_en || payload.response;
-          const speakText = payload.response_ur || displayText;
-          console.info("[WS] chat_response", { displayText, hasUrdu: Boolean(payload.response_ur) });
+          // Prefer Urdu for speaking if available and contains actual text, 
+          // otherwise fallback to English or raw response.
+          // Note: If you want the bot to speak Urdu, ensure payload.response_ur is populated.
+          const speakText = (payload.response_ur && payload.response_ur.length > 2) ? payload.response_ur : (payload.response_en || payload.response);
+
+          console.info("[WS] chat_response processing", {
+            displayTextPreview: displayText.substring(0, 20),
+            speakTextPreview: speakText.substring(0, 20),
+            hasUrdu: Boolean(payload.response_ur),
+            ttsEnabled
+          });
+
           const botMessage: ChatbotMessage = {
             message: displayText,
             timestamp: new Date().toISOString(),
             isUser: false,
           };
           setMessages((prev) => [...prev, botMessage]);
-          if (ttsEnabled) speak(speakText);
+          if (ttsEnabled) {
+            // Small delay to ensure state updates or previous audio clears
+            setTimeout(() => speak(speakText), 100);
+          }
         }
-      } catch {}
+      } catch (e) {
+        console.error("[WS] Error processing message", e);
+      }
     };
 
     return () => {
@@ -104,48 +119,88 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
         try {
           stopListening();
           console.info("[TTS] stopped listening before playback");
-        } catch {}
-      }
-      const isUrdu = /[\u0600-\u06FF]/.test(text);
-      console.info("[TTS] starting", { isUrdu });
-      try {
-        const urduVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_UR || "v_8eelc901";
-        const englishVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_EN || "v_8eelc901";
-        await speakWithUplift(text, isUrdu ? urduVoiceId : englishVoiceId);
-        console.info("[TTS] Uplift playback queued");
-        return;
-      } catch (e) {
-        console.warn("[TTS] Uplift failed, falling back to browser TTS", e);
+        } catch { }
       }
 
+      // Check if text has Urdu logical characters (Arabic script)
+      const isUrduScript = /[\u0600-\u06FF]/.test(text);
+      console.info("[TTS] starting", { textPreview: text.substring(0, 20), isUrduScript });
+
+      // 1. Try Uplift/External TTS first if configured
+      try {
+        const upliftApiKey = (import.meta as any).env?.VITE_UPLIFT_API_KEY || getEnvVar('VITE_UPLIFT_API_KEY', '');
+        const urduVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_UR;
+        const englishVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_EN;
+
+        if (upliftApiKey && (urduVoiceId || englishVoiceId)) {
+          await speakWithUplift(
+            text,
+            isUrduScript ? (urduVoiceId || "v_8eelc901") : (englishVoiceId || "v_8eelc901"),
+            upliftApiKey
+          );
+          console.info("[TTS] Uplift playback queued");
+          return;
+        }
+      } catch (e) {
+        console.warn("[TTS] Uplift/External TTS failed or not configured, falling back to browser TTS", e);
+      }
+
+      // 2. Browser TTS Fallback
       if (!("speechSynthesis" in window)) {
         console.warn("[TTS] speechSynthesis not available in this browser");
         return;
       }
+
+      // Cancel any current speech
+      window.speechSynthesis.cancel();
+
       const utter = new SpeechSynthesisUtterance(text);
       utter.rate = 1.0;
       utter.pitch = 1.0;
       utter.volume = 1.0;
+
       const voices = window.speechSynthesis.getVoices();
-      // Arabic script range indicates Urdu
-      const preferred = isUrdu ? voices.find((v) => /^(ur|ar|fa|ps|pa|hi)/i.test(v.lang)) || voices[0] : voices.find((v) => /en-|en_/i.test(v.lang)) || voices[0];
-      if (isUrdu) utter.lang = (preferred && preferred.lang) || "ur-PK";
-      if (preferred) utter.voice = preferred;
-      console.info("[TTS] Browser TTS", { selectedLang: utter.lang, voice: preferred?.name });
+
+      // Better voice selection logic
+      let selectedVoice = null;
+
+      if (isUrduScript) {
+        // Try to find Urdu or Arabic voice
+        selectedVoice = voices.find(v => v.lang.includes('ur') || v.lang.includes('ar'));
+      }
+
+      // If no Urdu voice or not Urdu script, try to find a natural sounding English voice or fallback
+      if (!selectedVoice) {
+        // Google voices often sound better
+        selectedVoice = voices.find(v => v.name.includes("Google") && v.lang.includes("en")) ||
+          voices.find(v => v.lang.includes("en-US")) ||
+          voices[0];
+      }
+
+      if (selectedVoice) {
+        utter.voice = selectedVoice;
+        utter.lang = selectedVoice.lang;
+      }
+
+      console.info("[TTS] Browser TTS", { selectedLang: utter.lang, voiceName: utter.voice?.name });
+
       isSpeakingRef.current = true;
       utter.onend = () => {
         isSpeakingRef.current = false;
+        console.log("[TTS] playback ended");
       };
-      try {
-        window.speechSynthesis.cancel();
-      } catch {}
-      try {
-        window.speechSynthesis.speak(utter);
-        console.info("[TTS] Browser playback queued");
-      } catch (e) {
-        console.error("Browser TTS speak failed", e);
-      }
-    } catch {}
+
+      utter.onerror = (e) => {
+        console.error("[TTS] playback error", e);
+        isSpeakingRef.current = false;
+      };
+
+      window.speechSynthesis.speak(utter);
+      console.info("[TTS] Browser playback queued");
+
+    } catch (e) {
+      console.error("[TTS] Unexpected error in speak function", e);
+    }
   };
 
   const testConnection = async () => {
@@ -261,7 +316,7 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
       if (window.speechSynthesis) {
         try {
           window.speechSynthesis.cancel();
-        } catch {}
+        } catch { }
       }
       startListening();
     }
