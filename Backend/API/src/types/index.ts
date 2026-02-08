@@ -34,6 +34,7 @@ export interface Restaurant {
   keywords: string[];
   food_categories: string[];
   logo_url: string | null;
+  cover_url: string | null;
   status: "active" | "inactive" | "pending";
   owner_id: string | null;
   created_at: Date;
@@ -316,6 +317,7 @@ export interface CreateRestaurantDto {
   keywords: string[];
   food_categories: string[];
   logo_url?: string;
+  cover_url?: string;
 }
 
 export interface CreateMenuItemDto {

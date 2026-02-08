@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Clock, Truck, Navigation, Flame, Crown } from 'lucide-react';
 import { Restaurant } from '../../types';
+import { getRestaurantImage } from '../../utils/imageUtils';
 
 interface RestaurantCardProps {
   restaurant: Restaurant & { distance?: number };
@@ -21,8 +22,17 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
       <div className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 group-hover:ring-2 group-hover:ring-primary-500/20 h-full flex flex-col border border-gray-100">
         <div className="relative h-48 overflow-hidden shrink-0">
           <img 
-            src={restaurant.image} 
-            alt={restaurant.name} 
+            src={restaurant.coverImage || getRestaurantImage(restaurant.name, 'cover', restaurant.cuisines)} 
+            alt={restaurant.name}
+            onError={(e) => {
+              // Only apply if not already using the backup
+              const backup = getRestaurantImage(restaurant.name, 'cover', restaurant.cuisines);
+              if ((e.target as HTMLImageElement).src !== backup) {
+                 (e.target as HTMLImageElement).src = backup;
+              } else {
+                 (e.target as HTMLImageElement).src = "/restaurant-5521372_1920.jpg";
+              }
+            }}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-in-out" 
           />
           {/* Subtle gradient for badges readability only */}
@@ -116,10 +126,10 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
             <div className="flex items-center text-gray-500 text-xs font-medium space-x-4">
               <div className="flex items-center">
                 <Truck className="w-3.5 h-3.5 mr-1.5" />
-                <span>₹{restaurant.deliveryFee}</span>
+                <span>Rs. {restaurant.deliveryFee}</span>
               </div>
               <div className="flex items-center">
-                 <span>Min ₹{restaurant.minimumOrder}</span>
+                 <span>Min Rs. {restaurant.minimumOrder}</span>
               </div>
             </div>
             

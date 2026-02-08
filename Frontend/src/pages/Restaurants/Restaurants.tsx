@@ -32,9 +32,9 @@ const Restaurants: React.FC = () => {
 
   const cuisines = ["American", "Indian", "Italian", "Chinese", "Fast Food", "Vegetarian", "Desserts", "Mexican", "Healthy"];
   const priceRanges = [
-    { value: "low", label: "Under ₹200", min: 0, max: 199 },
-    { value: "medium", label: "₹200 - ₹500", min: 200, max: 500 },
-    { value: "high", label: "Above ₹500", min: 501, max: Infinity },
+    { value: "low", label: "Under Rs. 200", min: 0, max: 199 },
+    { value: "medium", label: "Rs. 200 - Rs. 500", min: 200, max: 500 },
+    { value: "high", label: "Above Rs. 500", min: 501, max: Infinity },
   ];
 
   // Memoize user location to prevent unnecessary re-renders

@@ -39,29 +39,58 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
     onClose();
   };
 
+  const [isAutoSelectingLocation, setIsAutoSelectingLocation] = useState(false);
+
   const handleUseCurrentLocation = async () => {
-    if (coordinates) {
-      // Show form to collect street, area, and other details
-      setCurrentLocationCoords(coordinates);
-      setShowCurrentLocationForm(true);
-      // Try to reverse geocode to pre-fill city
-      try {
-        const address = await geoapifyService.reverseGeocode(coordinates.lat, coordinates.lng);
-        if (address) {
-          const parts = address.split(',');
-          setNewAddress(prev => ({
-            ...prev,
-            city: parts[parts.length - 1]?.trim() || '',
-            address: address,
-          }));
-        }
-      } catch (error) {
-        console.error("Reverse geocoding failed:", error);
-      }
-    } else {
+    setIsAutoSelectingLocation(true);
+    if (!coordinates) {
       getCurrentLocation();
     }
   };
+
+  // Effect to handle auto-selection when coordinates become available
+  useEffect(() => {
+    const autoSelectLocation = async () => {
+      if (isAutoSelectingLocation && coordinates) {
+        try {
+          // Default address structure
+          let addressText = `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
+          let city = "Unknown";
+          
+          // Try to reverse geocode
+          try {
+            const result = await geoapifyService.reverseGeocode(coordinates.lat, coordinates.lng);
+            if (result) {
+              addressText = result;
+              const parts = result.split(',');
+              city = parts[parts.length - 1]?.trim() || city;
+            }
+          } catch (error) {
+            console.error("Reverse geocoding failed:", error);
+          }
+
+          const address: Address = {
+            id: `curr-${Date.now()}`,
+            type: "other",
+            label: "Current Location",
+            address: addressText,
+            city: city,
+            coordinates: coordinates,
+            isDefault: false,
+          };
+
+          handleSelectAddress(address);
+          // Also update map coordinates if needed, but mainly we just select the address
+        } catch (error) {
+          console.error("Error auto-selecting location:", error);
+        } finally {
+          setIsAutoSelectingLocation(false);
+        }
+      }
+    };
+
+    autoSelectLocation();
+  }, [coordinates, isAutoSelectingLocation]);
 
   const handleSaveCurrentLocation = async () => {
     if (!currentLocationCoords || !newAddress.street || !newAddress.area) {
@@ -83,7 +112,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
     // Save to backend if user is authenticated
     if (state.user?.id) {
       try {
-        const existingAddresses = state.user.addresses || [];
+        const existingAddresses = (state.user as any).addresses || [];
         const updatedAddresses = [...existingAddresses, {
           id: address.id,
           type: address.type,
@@ -188,7 +217,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
       // Save to backend if user is authenticated
       if (state.user?.id) {
         try {
-          const existingAddresses = state.user.addresses || [];
+          const existingAddresses = (state.user as any).addresses || [];
           const updatedAddresses = [...existingAddresses, {
             id: address.id,
             type: address.type,
@@ -421,7 +450,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
           {/* Saved Addresses */}
           <div className="space-y-3 mb-6">
             <h4 className="font-medium text-gray-900">Saved Addresses</h4>
-            {state.user?.addresses.map((address) => (
+            {(state.user as any)?.addresses?.map((address: Address) => (
               <button key={address.id} onClick={() => handleSelectAddress(address)} className="w-full flex items-center space-x-3 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-gray-500" />
@@ -490,7 +519,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
                 <Button variant="outline" onClick={() => {
                   setIsAddingNew(false);
                   setSelectedMapCoords(null);
-                  setNewAddress({ type: "home", label: "", address: "", city: "" });
+                  setNewAddress({ type: "home", label: "", address: "", street: "", area: "", city: "" });
                 }} className="flex-1">
                   Cancel
                 </Button>

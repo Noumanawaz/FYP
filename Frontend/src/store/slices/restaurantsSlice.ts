@@ -40,7 +40,8 @@ const transformRestaurant = (backendRestaurant: any, location?: { lat: number; l
     id: backendRestaurant?.restaurant_id || backendRestaurant?.id || "unknown",
     name: backendRestaurant?.name || "Unknown Restaurant",
     description: typeof backendRestaurant?.description === "object" ? backendRestaurant.description.en || JSON.stringify(backendRestaurant.description) : backendRestaurant?.description || "",
-    image: backendRestaurant?.logo_url || "/placeholder-restaurant.jpg",
+    image: backendRestaurant?.logo_url || "/logo.png",
+    coverImage: backendRestaurant?.cover_url || backendRestaurant?.cover || "/restaurant-5521372_1920.jpg",
     rating: 4.5, // Default rating, can be added to backend later
     reviewCount: 0,
     deliveryTime: "30-45 min",

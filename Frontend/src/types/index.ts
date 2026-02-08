@@ -39,6 +39,7 @@ export interface Restaurant {
   name: string;
   description: string;
   image: string;
+  coverImage?: string;
   rating: number;
   reviewCount: number;
   deliveryTime: string;

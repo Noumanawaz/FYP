@@ -135,9 +135,10 @@ export const fetchMenuItems = createAsyncThunk(
       const menuItemsState = state.menuItems;
 
       // Don't dispatch if already loading
-      if (menuItemsState.loading) {
-        return false;
-      }
+      // Removed global loading check to allow concurrent fetching for different restaurants
+      // if (menuItemsState.loading) {
+      //   return false;
+      // }
 
       // Don't dispatch if we already have items for this restaurant (unless filtering)
       if (!params.category_id && !params.search && menuItemsState.itemsByRestaurant[params.restaurantId]?.length > 0) {

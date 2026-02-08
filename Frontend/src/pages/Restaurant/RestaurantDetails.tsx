@@ -7,6 +7,7 @@ import { fetchRestaurantById } from "../../store/slices/restaurantsSlice";
 import { fetchMenuItems } from "../../store/slices/menuItemsSlice";
 import { fetchMenuCategories } from "../../store/slices/menuCategoriesSlice";
 import { MenuItem, CartItem } from "../../types";
+import { getRestaurantImage } from "../../utils/imageUtils";
 import Button from "../../components/Common/Button";
 import LoadingSpinner from "../../components/Common/LoadingSpinner";
 
@@ -26,6 +27,11 @@ const RestaurantDetails: React.FC = () => {
     popular: false,
   });
 
+  // Reset selected category when restaurant ID changes
+  useEffect(() => {
+    setSelectedCategory("");
+  }, [id]);
+
   // Track last fetched restaurant ID to prevent duplicate calls
   const lastFetchedId = useRef<string | null>(null);
   const { loading: categoriesLoading } = useAppSelector((state) => state.menuCategories);
@@ -37,10 +43,10 @@ const RestaurantDetails: React.FC = () => {
       return;
     }
 
-    // Skip if already loading
-    if (restaurantLoading || menuLoading || categoriesLoading) {
-      return;
-    }
+    // Removed loading check to allow concurrent fetching
+    // if (restaurantLoading || menuLoading || categoriesLoading) {
+    //   return;
+    // }
 
     // Skip if same ID was just fetched
     if (lastFetchedId.current === id) {
@@ -217,12 +223,12 @@ const RestaurantDetails: React.FC = () => {
 
             <div className="flex items-center justify-between mt-2">
               <div className="flex flex-col">
-                <span className="text-lg font-bold text-gray-900">
-                  ₹{item.price.toLocaleString()}
+                  <span className="text-lg font-bold text-gray-900">
+                  Rs. {item.price.toLocaleString()}
                 </span>
                 {item.originalPrice && (
                   <span className="text-xs text-gray-400 line-through">
-                    ₹{item.originalPrice.toLocaleString()}
+                    Rs. {item.originalPrice.toLocaleString()}
                   </span>
                 )}
               </div>
@@ -261,8 +267,16 @@ const RestaurantDetails: React.FC = () => {
       <div className="relative h-[400px] md:h-[500px] w-full group">
          <div className="absolute inset-0 overflow-hidden">
             <img 
-               src={restaurant.image} 
-               alt={restaurant.name} 
+               src={restaurant.coverImage || getRestaurantImage(restaurant.name, 'cover', restaurant.cuisines)} 
+               alt={restaurant.name}
+               onError={(e) => {
+                  const backup = getRestaurantImage(restaurant.name, 'cover', restaurant.cuisines);
+                  if ((e.target as HTMLImageElement).src !== backup) {
+                     (e.target as HTMLImageElement).src = backup;
+                  } else {
+                     (e.target as HTMLImageElement).src = "/restaurant-5521372_1920.jpg";
+                  }
+               }}
                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[2s]" 
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
@@ -319,7 +333,7 @@ const RestaurantDetails: React.FC = () => {
                            <Truck className="w-5 h-5 text-purple-600" />
                         </div>
                         <div>
-                           <div className="font-bold text-gray-900">₹{restaurant.deliveryFee}</div>
+                           <div className="font-bold text-gray-900">Rs. {restaurant.deliveryFee}</div>
                            <div className="text-xs text-gray-500">Delivery Fee</div>
                         </div>
                      </div>
@@ -477,7 +491,7 @@ const RestaurantDetails: React.FC = () => {
                               <div key={cartItem.id} className="flex items-center justify-between group">
                                  <div className="flex-1">
                                     <div className="font-semibold text-gray-900 text-sm">{cartItem.menuItem.name}</div>
-                                    <div className="text-xs text-gray-500">₹{cartItem.menuItem.price}</div>
+                                    <div className="text-xs text-gray-500">Rs. {cartItem.menuItem.price}</div>
                                  </div>
                                  <div className="flex items-center bg-gray-50 rounded-lg p-1">
                                     <button onClick={() => handleRemoveFromCart(cartItem.menuItem)} className="w-6 h-6 rounded-md bg-white text-gray-500 shadow-sm flex items-center justify-center hover:text-red-500 transition-colors">
@@ -495,26 +509,26 @@ const RestaurantDetails: React.FC = () => {
                         <div className="border-t border-dashed border-gray-200 pt-4 space-y-2 mb-6">
                            <div className="flex justify-between text-sm text-gray-600">
                               <span>Subtotal</span>
-                              <span>₹{getTotalPrice()}</span>
+                              <span>Rs. {getTotalPrice()}</span>
                            </div>
                            <div className="flex justify-between text-sm text-gray-600">
                               <span>Delivery</span>
-                              <span>₹{restaurant.deliveryFee}</span>
+                              <span>Rs. {restaurant.deliveryFee}</span>
                            </div>
                            <div className="flex justify-between font-bold text-lg text-gray-900 pt-2">
                               <span>Total</span>
-                              <span>₹{getTotalPrice() + restaurant.deliveryFee}</span>
+                              <span>Rs. {getTotalPrice() + restaurant.deliveryFee}</span>
                            </div>
                         </div>
 
                         <Link to="/cart">
                            <Button className="w-full rounded-xl py-3 shadow-lg shadow-primary-500/20" disabled={getTotalPrice() < restaurant.minimumOrder}>
-                              {getTotalPrice() < restaurant.minimumOrder ? `Add ₹${restaurant.minimumOrder - getTotalPrice()} more` : "Checkout"}
+                              {getTotalPrice() < restaurant.minimumOrder ? `Add Rs. ${restaurant.minimumOrder - getTotalPrice()} more` : "Checkout"}
                            </Button>
                         </Link>
                         {getTotalPrice() < restaurant.minimumOrder && (
                            <p className="text-xs text-center text-amber-600 mt-2 bg-amber-50 py-1 rounded-lg">
-                              Minimum order is ₹{restaurant.minimumOrder}
+                              Minimum order is Rs. {restaurant.minimumOrder}
                            </p>
                         )}
                      </>

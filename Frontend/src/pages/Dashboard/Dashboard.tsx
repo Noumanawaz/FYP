@@ -523,7 +523,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
                         <div className="flex items-center justify-between">
-                          <p className="text-lg font-semibold text-gray-900">₹{order.total}</p>
+                          <p className="text-lg font-semibold text-gray-900">Rs. {order.total}</p>
                           {order.status === 'delivered' && (
                             <Button variant="outline" size="sm">
                               Reorder
