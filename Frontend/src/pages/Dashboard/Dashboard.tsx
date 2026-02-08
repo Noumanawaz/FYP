@@ -2,19 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
-  Star,
-  Clock,
-  Truck,
   MapPin,
   Heart,
   ShoppingBag,
   Tag,
   Headphones,
   Mic,
-  Filter,
   Grid,
   List,
-  Navigation,
   X,
   Package,
   CheckCircle,
@@ -31,6 +26,7 @@ import Button from '../../components/Common/Button';
 import { apiService } from '../../services/api';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { fetchNearbyRestaurants, fetchRestaurants } from '../../store/slices/restaurantsSlice';
+import RestaurantCard from '../../components/Restaurant/RestaurantCard';
 
 type TabType = 'restaurants' | 'favorites' | 'orders' | 'deals' | 'support';
 
@@ -66,7 +62,6 @@ const Dashboard: React.FC = () => {
   const [favoriteRestaurants, setFavoriteRestaurants] = useState<Restaurant[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -77,7 +72,7 @@ const Dashboard: React.FC = () => {
 
   // Get restaurants from Redux store
   const { restaurants: reduxRestaurants, nearbyRestaurants, loading: restaurantsLoading, error: restaurantsError } = useAppSelector((state) => state.restaurants);
-  const nearbyRestaurantsLoading = restaurantsLoading; // Alias for clarity
+
 
   // Redirect if not authenticated (only after verification is complete)
   useEffect(() => {
@@ -93,45 +88,32 @@ const Dashboard: React.FC = () => {
     }
   }, [state.isAuthenticated, state.user, state.isVerifyingAuth, navigate]);
 
-  // Track last fetched location to prevent duplicate calls
-  const lastFetchedLocation = useRef<{ lat: number; lng: number } | null>(null);
   const isInitialMount = useRef(true);
 
   // Fetch nearby restaurants when dashboard opens or location changes
+  // Fetch nearby restaurants when dashboard opens or location changes
   useEffect(() => {
-    // Skip if not authenticated or already loading
-    if (!state.isAuthenticated || !state.user || nearbyRestaurantsLoading || restaurantsLoading) {
+    // Skip if not authenticated
+    if (!state.isAuthenticated || !state.user) {
       return;
     }
 
     const currentLat = userLocation.lat;
     const currentLng = userLocation.lng;
-
-    // Check if location has actually changed
-    const locationChanged = 
-      !lastFetchedLocation.current ||
-      lastFetchedLocation.current.lat !== currentLat ||
-      lastFetchedLocation.current.lng !== currentLng;
-
-    // Only fetch if location changed or on initial mount
-    if (!isInitialMount.current && !locationChanged) {
-      return;
-    }
-
-    console.log('🔍 Dashboard: Fetching restaurants...', { lat: currentLat, lng: currentLng });
     
+    // Only fetch if we have valid coordinates
     if (currentLat && currentLng && !isNaN(currentLat) && !isNaN(currentLng)) {
-      console.log('📍 Dashboard: Fetching nearby restaurants within 15km radius at', currentLat, currentLng);
+      // The thunk itself handles caching now, so we can safely dispatch this.
+      // It will only hit the API if location changed significantly or cache expired.
+      console.log('📍 Dashboard: Checking nearby restaurants for', currentLat, currentLng);
       reduxDispatch(fetchNearbyRestaurants({ lat: currentLat, lng: currentLng, radius: 15 }));
-      lastFetchedLocation.current = { lat: currentLat, lng: currentLng };
     } else {
       console.log('🌐 Dashboard: No valid location, fetching all restaurants');
       reduxDispatch(fetchRestaurants());
-      lastFetchedLocation.current = null;
     }
 
     isInitialMount.current = false;
-  }, [reduxDispatch, state.isAuthenticated, state.user, userLocation.lat, userLocation.lng, nearbyRestaurantsLoading, restaurantsLoading]);
+  }, [reduxDispatch, state.isAuthenticated, state.user, userLocation.lat, userLocation.lng]);
 
   // Use nearby restaurants if available, otherwise use all restaurants
   const restaurants = (nearbyRestaurants.length > 0 ? nearbyRestaurants : reduxRestaurants) as (Restaurant & { distance?: number })[];
@@ -157,8 +139,9 @@ const Dashboard: React.FC = () => {
       try {
         const response = await apiService.getOrders({ page: 1, limit: 20 });
         if (response.success && response.data) {
+          const data = response.data as any;
           // Transform API orders to local format
-          const transformedOrders: Order[] = (response.data.orders || []).map((order: any) => ({
+          const transformedOrders: Order[] = (data.orders || []).map((order: any) => ({
             id: order.order_id || order._id,
             restaurantName: order.restaurant_name || 'Restaurant',
             restaurantImage: order.restaurant_image || '',
@@ -227,15 +210,8 @@ const Dashboard: React.FC = () => {
     ]);
   }, [restaurants]);
 
-  const filteredRestaurants = restaurants.filter(restaurant => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      restaurant.name.toLowerCase().includes(query) ||
-      restaurant.description.toLowerCase().includes(query) ||
-      restaurant.cuisines.some(c => c.toLowerCase().includes(query))
-    );
-  });
+  // Filter logic removed as search is now handled globally
+  const filteredRestaurants = restaurants;
 
   const toggleFavorite = (restaurantId: string) => {
     const currentFavs = (state.user as any)?.favoriteRestaurants || (state.user as any)?.favorite_restaurants || [];
@@ -250,7 +226,7 @@ const Dashboard: React.FC = () => {
       payload: {
         ...state.user!,
         favoriteRestaurants: newFavs
-      }
+      } as any
     });
   };
 
@@ -288,92 +264,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const RestaurantCard: React.FC<{ restaurant: Restaurant & { distance?: number }; showFavorite?: boolean }> = ({ 
-    restaurant, 
-    showFavorite = true 
-  }) => (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 group">
-      <div className="relative">
-        <img
-          src={restaurant.image}
-          alt={restaurant.name}
-          className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        {restaurant.promo && (
-          <div className="absolute top-4 left-4 bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium shadow-lg">
-            {restaurant.promo.title}
-          </div>
-        )}
-        {showFavorite && (
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              toggleFavorite(restaurant.id);
-            }}
-            className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-sm"
-          >
-            <Heart
-              className={`w-5 h-5 ${
-                ((state.user as any)?.favoriteRestaurants || (state.user as any)?.favorite_restaurants || []).includes(restaurant.id)
-                  ? 'fill-red-500 text-red-500'
-                  : 'text-gray-600'
-              }`}
-            />
-          </button>
-        )}
-        {!restaurant.isOpen && (
-          <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
-            <span className="text-white font-semibold text-lg">Closed</span>
-          </div>
-        )}
-        <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm px-3 py-1 rounded-lg flex items-center space-x-1 shadow-sm">
-          <Star className="w-4 h-4 text-yellow-400 fill-current" />
-          <span className="text-sm font-medium text-gray-900">{restaurant.rating}</span>
-        </div>
-      </div>
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-2">
-          <h3
-            className="text-xl font-semibold text-gray-900 flex-1 cursor-pointer hover:text-blue-600 transition-colors"
-            onClick={() => navigate(`/restaurant/${restaurant.id}`)}
-          >
-            {restaurant.name}
-          </h3>
-          {restaurant.distance && (
-            <div className="flex items-center text-sm text-gray-500 ml-2 bg-gray-50 px-2 py-1 rounded-full">
-              <Navigation className="w-3 h-3 mr-1" />
-              <span>{restaurant.distance.toFixed(1)}km</span>
-            </div>
-          )}
-        </div>
-        <p className="text-gray-600 mb-3 line-clamp-2">{restaurant.description}</p>
-        <div className="flex items-center space-x-2 mb-4 flex-wrap gap-2">
-          {restaurant.cuisines.slice(0, 3).map((cuisine) => (
-            <span
-              key={cuisine}
-              className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
-            >
-              {cuisine}
-            </span>
-          ))}
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center space-x-1 text-gray-500">
-            <Clock className="w-4 h-4" />
-            <span>{restaurant.deliveryTime}</span>
-          </div>
-          <div className="flex items-center space-x-1 text-gray-500">
-            <Truck className="w-4 h-4" />
-            <span>₹{restaurant.deliveryFee}</span>
-          </div>
-          <div className="text-xs text-gray-500">
-            Min: ₹{restaurant.minimumOrder}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   // Show loading while verifying authentication
   if (state.isVerifyingAuth) {
     return (
@@ -385,135 +275,83 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Welcome back, {state.user?.name?.split(' ')[0] || 'Customer'}
+      {/* Hero Section */}
+      <div className="bg-white border-b border-gray-100 relative overflow-hidden">
+        {/* Background Blobs */}
+        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h1 className="text-3xl md:text-4xl font-extrabold mb-2 text-gray-900 tracking-tight">
+                Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-blue-600">{state.user?.name?.split(' ')[0] || 'Hungry User'}</span>
               </h1>
-              <div className="flex items-center space-x-2 mt-1">
-                <MapPin className="w-4 h-4 text-gray-400" />
-                <p className="text-sm text-gray-600">
-                  {state.selectedAddress?.address || 'Set your delivery location'}
-                </p>
+              <div className="flex items-center justify-center md:justify-start space-x-2 mt-4">
+                <div className="flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200 text-gray-700 hover:border-primary-200 transition-colors cursor-pointer">
+                  <MapPin className="w-4 h-4 text-primary-500 mr-2" />
+                  <p className="text-sm font-medium">
+                    {state.selectedAddress?.address || 'Set your delivery location'}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            
+            <div className="flex items-center space-x-3 w-full md:w-auto">
               <Button
                 variant="outline"
                 onClick={() => setIsVoiceModalOpen(true)}
                 leftIcon={<Mic className="w-4 h-4" />}
-                className="hidden md:flex"
+                className="hidden md:flex bg-white text-gray-700 border-gray-200 hover:bg-gray-50 shadow-sm"
               >
                 Voice Order
               </Button>
               <button
                 onClick={() => setIsVoiceModalOpen(true)}
-                className="md:hidden w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors"
+                className="md:hidden w-12 h-12 bg-primary-600 text-white rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform"
               >
                 <Mic className="w-5 h-5" />
               </button>
             </div>
           </div>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search restaurants, dishes, cuisines..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 sticky top-[140px] z-30">
+      <div className="bg-white border-b border-gray-100 sticky top-16 lg:top-20 z-30 shadow-sm transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-1 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setActiveTab('restaurants')}
-              className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'restaurants'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Grid className="w-4 h-4" />
-              <span>Restaurants</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('favorites')}
-              className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'favorites'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Heart className="w-4 h-4" />
-              <span>Favorites</span>
-              {favoriteRestaurants.length > 0 && (
-                <span className="bg-blue-100 text-blue-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                  {favoriteRestaurants.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'orders'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Past Orders</span>
-              {orders.length > 0 && (
-                <span className="bg-blue-100 text-blue-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                  {orders.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('deals')}
-              className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'deals'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Tag className="w-4 h-4" />
-              <span>Deals & Offers</span>
-              {deals.length > 0 && (
-                <span className="bg-orange-100 text-orange-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                  {deals.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('support')}
-              className={`flex items-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === 'support'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Headphones className="w-4 h-4" />
-              <span>Customer Service</span>
-            </button>
+          <div className="flex space-x-2 overflow-x-auto scrollbar-hide py-3">
+            {[
+              { id: 'restaurants', icon: Grid, label: 'Restaurants' },
+              { id: 'favorites', icon: Heart, label: 'Favorites', count: favoriteRestaurants.length },
+              { id: 'orders', icon: ShoppingBag, label: 'Past Orders', count: orders.length },
+              { id: 'deals', icon: Tag, label: 'Deals & Offers', count: deals.length },
+              { id: 'support', icon: Headphones, label: 'Support' },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as TabType)}
+                  className={`flex items-center space-x-2 px-4 py-2.5 rounded-full font-medium text-sm transition-all whitespace-nowrap ${
+                    isActive
+                      ? 'bg-primary-50 text-primary-600 shadow-sm ring-1 ring-primary-100'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                  <span>{tab.label}</span>
+                  {tab.count !== undefined && tab.count > 0 && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      isActive ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -548,11 +386,11 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-            {restaurantsLoading ? (
+            {restaurantsLoading && filteredRestaurants.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : restaurantsError ? (
+            ) : restaurantsError && filteredRestaurants.length === 0 ? (
               <div className="text-center py-12">
                 <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Error loading restaurants</h3>
@@ -567,15 +405,27 @@ const Dashboard: React.FC = () => {
               </div>
             ) : (
               <>
+                {restaurantsLoading && (
+                  <div className="flex items-center justify-center py-4 text-blue-600">
+                    <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                    <span className="text-sm font-medium">Updating list...</span>
+                  </div>
+                )}
                 <div
                   className={`grid gap-6 ${
                     viewMode === 'grid'
-                      ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-                      : 'grid-cols-1'
+                      ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                      : 'grid-cols-1 max-w-3xl mx-auto'
                   }`}
                 >
                   {filteredRestaurants.map((restaurant) => (
-                    <RestaurantCard key={restaurant.id} restaurant={restaurant} />
+                    <RestaurantCard 
+                      key={restaurant.id} 
+                      restaurant={restaurant} 
+                      showFavorite={true}
+                      isFavorite={(state.user as any)?.favoriteRestaurants?.includes(restaurant.id) || (state.user as any)?.favorite_restaurants?.includes(restaurant.id)}
+                      onToggleFavorite={(_, id) => toggleFavorite(id)}
+                    />
                   ))}
                 </div>
                 {filteredRestaurants.length === 0 && (
@@ -603,7 +453,13 @@ const Dashboard: React.FC = () => {
             {favoriteRestaurants.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {favoriteRestaurants.map((restaurant) => (
-                  <RestaurantCard key={restaurant.id} restaurant={restaurant} showFavorite={true} />
+                  <RestaurantCard 
+                    key={restaurant.id} 
+                    restaurant={restaurant} 
+                    showFavorite={true}
+                    isFavorite={true}
+                    onToggleFavorite={(_, id) => toggleFavorite(id)}
+                  />
                 ))}
               </div>
             ) : (
@@ -868,4 +724,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-

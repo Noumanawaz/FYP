@@ -14,6 +14,8 @@ interface RestaurantsState {
     categories?: string[];
     status?: string;
   };
+  lastFetchedLocation: { lat: number; lng: number } | null;
+  lastUpdateTime: number | null;
 }
 
 export const initialState: RestaurantsState = {
@@ -25,6 +27,8 @@ export const initialState: RestaurantsState = {
   filters: {
     search: "",
   },
+  lastFetchedLocation: null,
+  lastUpdateTime: null,
 };
 
 // Transform backend restaurant to frontend format
@@ -65,6 +69,18 @@ const transformRestaurant = (backendRestaurant: any, location?: { lat: number; l
   };
 };
 
+// Helper to calculate distance in km
+const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+};
+
 // Async thunks
 export const fetchRestaurants = createAsyncThunk("restaurants/fetchAll", async (params?: { page?: number; limit?: number; search?: string; price_range?: string; categories?: string[] }) => {
   try {
@@ -82,15 +98,7 @@ export const fetchRestaurants = createAsyncThunk("restaurants/fetchAll", async (
 
 export const fetchRestaurantById = createAsyncThunk(
   "restaurants/fetchById",
-  async (id: string, { getState }) => {
-    const state = getState() as any;
-    const restaurantsState = state.restaurants;
-
-    // If we already have this restaurant selected, return it
-    if (restaurantsState.selectedRestaurant?.id === id) {
-      return restaurantsState.selectedRestaurant;
-    }
-
+  async (id: string) => {
     const response = await apiService.getRestaurant(id);
     if (response.success && response.data) {
       return response.data;
@@ -100,10 +108,13 @@ export const fetchRestaurantById = createAsyncThunk(
   {
     condition: (id: string, { getState }) => {
       const state = getState() as any;
-      const restaurantsState = state.restaurants;
+      const restaurantsState = state.restaurants as RestaurantsState;
 
       // Don't dispatch if we already have this restaurant selected
-      return restaurantsState.selectedRestaurant?.id !== id;
+      if (restaurantsState.selectedRestaurant?.id === id) {
+        return false;
+      }
+      return true;
     },
   }
 );
@@ -116,19 +127,40 @@ export const searchRestaurants = createAsyncThunk("restaurants/search", async (k
   throw new Error(response.error || "Failed to search restaurants");
 });
 
-export const fetchNearbyRestaurants = createAsyncThunk("restaurants/fetchNearby", async (params: { lat: number; lng: number; radius?: number }) => {
-  try {
+export const fetchNearbyRestaurants = createAsyncThunk(
+  "restaurants/fetchNearby", 
+  async (params: { lat: number; lng: number; radius?: number }) => {
     const response = await apiService.getNearbyRestaurants(params.lat, params.lng, params.radius);
     if (response.success && response.data) {
       const data = response.data as any;
       const restaurants = Array.isArray(data.restaurants) ? data.restaurants : [];
-      return restaurants;
+      return { restaurants, lat: params.lat, lng: params.lng };
     }
     throw new Error(response.error || "Failed to fetch nearby restaurants");
-  } catch (error) {
-    throw error;
+  },
+  {
+    condition: (params, { getState }) => {
+      const state = getState() as any;
+      const { lastFetchedLocation, lastUpdateTime, loading } = state.restaurants as RestaurantsState;
+
+      // If already loading, skip
+      if (loading) return false;
+
+      // If we have cached data
+      if (lastFetchedLocation && lastUpdateTime) {
+        const timeDiff = Date.now() - lastUpdateTime;
+        const distance = calculateDistance(lastFetchedLocation.lat, lastFetchedLocation.lng, params.lat, params.lng);
+
+        // If data is fresh (< 5 mins) and location is close (< 2km), use cache
+        if (timeDiff < 5 * 60 * 1000 && distance < 2) {
+          console.log("Using cached nearby restaurants (Distance: " + distance.toFixed(2) + "km, Age: " + (timeDiff/1000).toFixed(0) + "s)");
+          return false; 
+        }
+      }
+      return true;
+    }
   }
-});
+);
 
 const restaurantsSlice = createSlice({
   name: "restaurants",
@@ -192,7 +224,9 @@ const restaurantsSlice = createSlice({
       })
       .addCase(fetchNearbyRestaurants.fulfilled, (state, action) => {
         state.loading = false;
-        state.nearbyRestaurants = action.payload.map((r: any) => transformRestaurant(r));
+        state.nearbyRestaurants = action.payload.restaurants.map((r: any) => transformRestaurant(r));
+        state.lastFetchedLocation = { lat: action.payload.lat, lng: action.payload.lng };
+        state.lastUpdateTime = Date.now();
       })
       .addCase(fetchNearbyRestaurants.rejected, (state, action) => {
         state.loading = false;
