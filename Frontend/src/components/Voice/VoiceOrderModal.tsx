@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, MicOff, X, Send, RotateCcw, MessageSquare, Bot, User, ChefHat, Star } from "lucide-react";
+import { Mic, MicOff, X, Bot } from "lucide-react";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 import { VoiceOrderProcessor, ParsedOrder } from "../../utils/voiceOrderProcessor";
 import OrderConfirmationModal from "./OrderConfirmationModal";
@@ -23,23 +23,12 @@ interface VoiceOrderModalProps {
 }
 
 // Get RAG/chatbot base URL from env, fallback to API base URL without /api/v1, or default
-const getChatbotBaseUrl = (): string => {
-  const ragUrl = getEnvVar('VITE_RAG_BASE_URL', '');
-  if (ragUrl) return ragUrl;
+// Get RAG/chatbot base URL from env - helper kept if needed for future, or remove if strictly unused. 
+// Lint says unused, so removing it to be clean.
 
-  // Fallback: try to derive from API base URL (remove /api/v1 if present)
-  const apiUrl = getEnvVar('VITE_API_BASE_URL', '');
-  if (apiUrl) {
-    // Remove /api/v1 suffix if present, or use as-is
-    return apiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
-  }
-
-  // Final fallback
-  return 'http://localhost:8000';
-};
 
 const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOrderSubmit }) => {
-  const { isListening, transcript, isSupported, error, startListening, stopListening, resetTranscript } = useSpeechRecognition();
+  const { isListening, transcript, isSupported, startListening, stopListening, resetTranscript } = useSpeechRecognition();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -47,9 +36,12 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  // const inputRef = useRef<HTMLInputElement>(null); // Unused
   const chatbotServiceRef = useRef<ChatbotService>(new ChatbotService());
   const isSpeakingRef = useRef<boolean>(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper to get voices, waiting for them to load if necessary
   const getVoices = (): Promise<SpeechSynthesisVoice[]> => {
@@ -75,8 +67,8 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   };
 
   // TTS helper (prefer Uplift; fallback to browser speechSynthesis). Show EN, speak UR.
-  // TTS (prefer Uplift, fallback to browser TTS). Auto-pick voice by text script.
-  const speak = async (text: string) => {
+  // TTS helper (prefer Uplift; fallback to browser TTS). Auto-pick voice by text script.
+  const speak = async (text: string, onComplete?: () => void) => {
     try {
       if (isListening) {
         try {
@@ -106,8 +98,11 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
         try {
           const urduVoiceId = getEnvVar('VITE_UPLIFT_VOICE_UR', 'v_8eelc901');
           const englishVoiceId = getEnvVar('VITE_UPLIFT_VOICE_EN', 'v_8eelc901');
+          setIsSpeaking(true);
           await speakWithUplift(text, isUrduScript ? urduVoiceId : englishVoiceId, upliftApiKey);
+          setIsSpeaking(false);
           console.info("[OrderModal][TTS] Uplift playback queued");
+          if (onComplete) onComplete();
           return;
         } catch (e) {
           console.warn("[OrderModal][TTS] Uplift failed, falling back to browser TTS", e);
@@ -118,6 +113,7 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
       if (!("speechSynthesis" in window)) {
         console.warn("[OrderModal][TTS] speechSynthesis not available");
+        if (onComplete) onComplete();
         return;
       }
 
@@ -157,14 +153,19 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
       });
 
       isSpeakingRef.current = true;
+      setIsSpeaking(true);
       utter.onend = () => {
         isSpeakingRef.current = false;
+        setIsSpeaking(false);
         console.log("[OrderModal][TTS] playback ended");
+        if (onComplete) onComplete();
       };
 
       utter.onerror = (e) => {
         console.error("[OrderModal][TTS] playback error", e);
         isSpeakingRef.current = false;
+        setIsSpeaking(false);
+        if (onComplete) onComplete();
       };
 
       try {
@@ -172,24 +173,41 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
         console.info("[OrderModal][TTS] Browser playback queued");
       } catch (e) {
         console.error("[OrderModal][TTS] Browser speak failed", e);
+        if (onComplete) onComplete();
       }
     } catch (e) {
       console.error("[OrderModal][TTS] Speak error", e);
+      if (onComplete) onComplete();
     }
   };
 
-  // Initialize with welcome message
+  // Initialize with simpler welcome message but DO NOT auto-start listening
   useEffect(() => {
     if (isOpen && messages.length === 0) {
+      const welcomeText = "Hi there! I'm listening. What are you in the mood for?";
       const welcomeMessage: Message = {
         id: "1",
         type: "bot",
-        content: "Welcome to Vocabite AI Assistant. I can help you with:\n\n**Ordering Food** - Tell me what you'd like to order\n**Menu Recommendations** - Ask about popular dishes\n**General Questions** - About Pakistani cuisine, delivery times, etc.\n\nWhat would you like to know or order today?",
+        content: welcomeText,
         timestamp: new Date(),
       };
       setMessages([welcomeMessage]);
+      // Do not speak or listen automatically on mount
     }
-  }, [isOpen, messages.length]);
+  }, [isOpen]);
+
+  // Handle manual start of the call
+  const handleStartCall = () => {
+    setHasStarted(true);
+    const welcomeText = messages[0]?.content || "Hi there! I'm listening. What are you in the mood for?";
+
+    // Speak welcome message, then start listening
+    speak(welcomeText, () => {
+      if (!isListening && !isProcessing) {
+        startListening();
+      }
+    });
+  };
 
   useEffect(() => {
     if (transcript) {
@@ -219,6 +237,7 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
+    resetTranscript(); // Clear transcript after sending
     setIsProcessing(true);
 
     // Add typing indicator
@@ -251,7 +270,15 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
       setMessages((prev) => [...prev, botMessage]);
       // Speak Urdu if available; else English
-      speak(speakText);
+      speak(speakText, () => {
+        // Auto-resume listening after AI finishes speaking, if call is still active
+        // Add a small delay to prevent the mic from picking up the very end of the AI's speech (echo)
+        if (isOpen && !isProcessing) {
+          setTimeout(() => {
+            startListening();
+          }, 500); // 500ms safety buffer
+        }
+      });
 
       // If backend implies an order, try parsing for confirmation modal
       const parsed = VoiceOrderProcessor.parseOrder(userMessage.content);
@@ -317,12 +344,37 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
     onClose();
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+  // Silence Detection Logic
+  useEffect(() => {
+    // Only run if listening and we have some text
+    if (isListening && transcript.length > 0) {
+      // Clear existing timer on every transcript change (debounce)
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+      // Set new timer for 1.5s
+      silenceTimerRef.current = setTimeout(() => {
+        console.log("[VoiceOrderModal] Silence detected (1.5s), stopping listening to auto-send...");
+        stopListening();
+        // The existing useEffect for (!isListening && transcript) will handle the specific sendMessage call
+      }, 1500);
+    } else {
+      // Cleanup if not listening or empty
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    }
+
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    }
+  }, [transcript, isListening, stopListening]);
+
+  // Auto-send when listening stops and we have a transcript
+  useEffect(() => {
+    if (!isListening && transcript && transcript.trim().length > 0 && !isProcessing && !isSpeaking) {
       handleSendMessage();
     }
-  };
+  }, [isListening, transcript, isProcessing, isSpeaking]);
+
+  // handleKeyPress removed as text input is hidden/removed
 
   if (!isOpen) return null;
 
@@ -347,132 +399,176 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl max-w-4xl w-full h-[700px] flex flex-col">
-          {/* Header */}
-          <div className="p-6 border-b border-gray-200 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-                  <Bot className="w-7 h-7 text-primary-600" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">Vocabite AI Assistant</h3>
-                  <p className="text-sm text-gray-500">Voice ordering & recommendations for Pakistani cuisine</p>
-                </div>
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white overflow-hidden font-sans">
+        {/* Premium Futuristic Background */}
+        <div className="absolute inset-0 z-0">
+          {/* Deep Space Gradient */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0f172a] via-[#1e1b4b] to-[#0f172a] z-0"></div>
+
+          {/* Aurora Effect */}
+          <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-purple-600/20 rounded-full blur-[120px] animate-pulse"></div>
+          <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-cyan-600/20 rounded-full blur-[120px] animate-pulse delay-700"></div>
+
+          {/* Grid overlay for tech feel */}
+          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-0 mix-blend-overlay"></div>
+        </div>
+
+        {/* Main Content Container */}
+        <div className="relative z-10 w-full max-w-2xl flex flex-col items-center justify-between h-full py-16 px-6">
+
+          {/* Minimal Header */}
+          <div className="w-full flex justify-between items-center opacity-70">
+            <div className="flex items-center gap-2">
+              <Bot className="w-5 h-5 text-cyan-300" />
+              <span className="text-xs font-medium tracking-widest text-cyan-100/80 uppercase">VOCABITE AI</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Connection Status */}
+              <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm">
+                <div className={`w-1.5 h-1.5 rounded-full ${isListening ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-white/80">
+                  {isListening ? "LISTENING" : isProcessing ? "THINKING" : isSpeaking ? "SPEAKING" : "IDLE"}
+                </span>
               </div>
-              <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100">
-                <X className="w-6 h-6" />
+
+              <button onClick={handleClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X className="w-5 h-5 text-white/70" />
               </button>
             </div>
           </div>
 
-          <div className="flex-1 flex overflow-hidden">
-            {/* Left Side - Voice Interface */}
-            <div className="w-1/3 border-r border-gray-200 p-6 flex flex-col">
-              <div className="text-center mb-6">
-                <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 transition-all duration-300 ${isListening ? "bg-red-100 animate-pulse scale-110" : "bg-primary-100"}`}>
-                  <button onClick={handleToggleListening} disabled={isProcessing} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${isListening ? "bg-red-500 hover:bg-red-600 shadow-lg" : "bg-primary-500 hover:bg-primary-600"} ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}`}>
-                    {isListening ? <MicOff className="w-8 h-8 text-white" /> : <Mic className="w-8 h-8 text-white" />}
-                  </button>
-                </div>
+          {/* Central Intelligence Visualizer */}
+          <div className="flex-1 flex flex-col items-center justify-center w-full relative">
 
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-900">{isProcessing ? "Processing..." : isListening ? "Listening... Speak now" : "Tap to start voice input"}</p>
-
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-gray-700">Quick Actions</h4>
-                <div className="space-y-2">
-                  <button onClick={() => setInputText("What's popular today?")} className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-                    Popular dishes
-                  </button>
-                  <button onClick={() => setInputText("What do you recommend?")} className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-                    Get recommendations
-                  </button>
-                  <button onClick={() => setInputText("How long does delivery take?")} className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-                    Delivery times
-                  </button>
-                </div>
-              </div>
-
-              {/* Example Orders */}
-              <div className="mt-6">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Try saying:</h4>
-                <div className="space-y-2 text-xs text-gray-500">
-                  <p>"I want chicken biryani with extra raita"</p>
-                  <p>"Order 2 karahi gosht and 4 naan"</p>
-                  <p>"Get me seekh kebab with mint chutney"</p>
-                  <p>"3 chicken tikka and 2 lassi"</p>
-                </div>
-              </div>
-
-              {/* Reset Button */}
-              <div className="mt-auto">
-                <button onClick={handleReset} disabled={isProcessing} className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50">
-                  <RotateCcw className="w-4 h-4" />
-                  <span>Reset Conversation</span>
+            {!hasStarted ? (
+              /* Initial Start State */
+              <div className="flex flex-col items-center animate-fade-in-up">
+                <button
+                  onClick={handleStartCall}
+                  className="group relative w-32 h-32 flex items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-400/30 hover:bg-cyan-500/20 transition-all duration-500 hover:scale-110 hover:shadow-[0_0_50px_rgba(34,211,238,0.3)]"
+                >
+                  <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-cyan-400 duration-3000"></div>
+                  <Mic className="w-10 h-10 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
                 </button>
+                <p className="mt-8 text-cyan-200/60 font-light tracking-widest text-sm uppercase">Tap to Connect</p>
               </div>
-            </div>
+            ) : (
+              /* Active Call State */
+              <>
+                {/* Status Indicator (Prominent) */}
+                <div className="absolute top-10 flex flex-col items-center gap-2 animate-fade-in-up">
+                  <span className={`text-sm font-bold tracking-[0.2em] uppercase transition-colors duration-500 ${isListening ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" :
+                    isProcessing ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.8)]" :
+                      isSpeaking ? "text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.8)]" :
+                        "text-slate-400"
+                    }`}>
+                    {isListening ? "Listening..." : isProcessing ? "Thinking..." : isSpeaking ? "Speaking..." : "Standby"}
+                  </span>
+                </div>
 
-            {/* Right Side - Chat Interface */}
-            <div className="flex-1 flex flex-col">
-              {/* Chat Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((message) => (
-                  <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`flex items-start space-x-3 max-w-[85%] ${message.type === "user" ? "flex-row-reverse space-x-reverse" : ""}`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.type === "user" ? "bg-primary-500" : "bg-gray-100"}`}>{message.type === "user" ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-gray-600" />}</div>
-                      <div className={`px-4 py-3 rounded-2xl ${message.type === "user" ? "bg-primary-500 text-white" : "bg-gray-100 text-gray-900"}`}>
-                        {message.isTyping ? (
-                          <div className="flex items-center space-x-1">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-                          </div>
-                        ) : (
-                          <div className="whitespace-pre-line text-sm leading-relaxed">{message.content}</div>
-                        )}
+                {/* The "Brain" Orb */}
+                <div className="relative w-72 h-72 flex items-center justify-center mb-8 mt-4">
+                  {/* Rotating Rings */}
+                  <div className={`absolute inset-0 border border-cyan-500/10 rounded-full box-border transition-all duration-1000 ${isListening ? 'scale-110 opacity-40 animate-[spin_10s_linear_infinite]' : 'scale-100 opacity-20'}`}></div>
+                  <div className={`absolute inset-6 border border-purple-500/10 rounded-full box-border transition-all duration-1000 delay-100 ${isProcessing ? 'scale-105 opacity-50 animate-[spin_5s_linear_infinite_reverse]' : 'scale-100 opacity-20'}`}></div>
+
+                  {/* Core Glow */}
+                  <div className={`
+                                w-48 h-48 rounded-full blur-2xl transition-all duration-700
+                                ${isListening ? 'bg-cyan-500/30' : ''}
+                                ${isProcessing ? 'bg-purple-500/40' : ''}
+                                ${isSpeaking ? 'bg-green-500/30' : ''}
+                                ${!isListening && !isProcessing && !isSpeaking ? 'bg-slate-500/10' : ''}
+                            `}></div>
+
+                  {/* Central Element */}
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    {isSpeaking ? (
+                      <div className="flex items-center gap-2 h-16">
+                        {[1, 2, 3, 2, 1].map((scale, i) => (
+                          <div key={i} className="w-2 bg-green-400 rounded-full animate-wave shadow-[0_0_15px_rgba(74,222,128,0.5)]" style={{ height: `${scale * 10}px`, animationDelay: `${i * 0.1}s` }}></div>
+                        ))}
                       </div>
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input Area */}
-              <div className="p-4 border-t border-gray-200 flex-shrink-0">
-                <div className="flex items-center space-x-3">
-                  <div className="flex-1 relative">
-                    <input ref={inputRef} type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={handleKeyPress} placeholder={isListening ? "Listening..." : "Type your message or use voice..."} disabled={isProcessing} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-12 disabled:bg-gray-50" />
-                    <button onClick={handleSendMessage} disabled={!inputText.trim() || isProcessing} className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors">
-                      <Send className="w-4 h-4" />
-                    </button>
+                    ) : isProcessing ? (
+                      <div className="w-16 h-16 border-4 border-t-purple-400 border-r-purple-400/30 border-b-purple-400/10 border-l-purple-400/60 rounded-full animate-spin shadow-[0_0_20px_rgba(192,132,252,0.4)]"></div>
+                    ) : (
+                      <div className={`w-40 h-40 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-sm transition-all duration-500 ${isListening ? 'bg-cyan-500/10 shadow-[0_0_30px_rgba(34,211,238,0.2)] scale-110' : 'bg-white/5'}`}>
+                        <Mic className={`w-10 h-10 transition-colors duration-300 ${isListening ? 'text-cyan-400' : 'text-white/20'}`} />
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Status */}
-                <div className="mt-2 text-center">
-                  {isListening && (
-                    <p className="text-sm text-red-600 flex items-center justify-center">
-                      <span className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse inline-block"></span>
-                      Listening... Speak now
+                {/* Live Subtitles */}
+                <div className="w-full max-w-xl text-center min-h-[160px] flex flex-col justify-end pb-8 relative z-20">
+                  {/* User Transcript */}
+                  {transcript && (
+                    <h2 className="text-3xl md:text-4xl font-light text-white leading-tight animate-fade-in-up tracking-tight">
+                      "{transcript}"
+                    </h2>
+                  )}
+
+                  {/* Bot Response */}
+                  {!transcript && messages.length > 0 && (
+                    <h2 className="text-2xl md:text-3xl font-light text-cyan-50 leading-relaxed animate-fade-in-up tracking-tight drop-shadow-[0_0_15px_rgba(165,243,252,0.3)]">
+                      {messages[messages.length - 1].content}
+                    </h2>
+                  )}
+
+                  {/* Hint Loop */}
+                  {!transcript && messages.length <= 1 && !isSpeaking && (
+                    <p className="mt-6 text-sm text-cyan-200/40 font-light tracking-wide uppercase animate-pulse">
+                      Try saying "I'm craving Biryani"
                     </p>
                   )}
-                  {error && <p className="text-sm text-red-600">{error}</p>}
                 </div>
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+
+          {/* Bottom Controls (Minimal) */}
+          <div className="flex gap-6 items-center z-20">
+            {hasStarted && (
+              <button
+                onClick={handleToggleListening}
+                className={`
+                            w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 backdrop-blur-md border hover:scale-105 active:scale-95
+                            ${isListening
+                    ? 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)]'
+                    : 'bg-white/5 text-white border-white/10 hover:bg-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]'}
+                        `}
+              >
+                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
+            )}
+
+            <button
+              onClick={handleClose}
+              className="w-14 h-14 rounded-full bg-white/5 text-white/50 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:text-white transition-all duration-300 hover:scale-105"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Order Confirmation Modal */}
+        {/* Global Styles for this component's animations */}
+        <style>{`
+            @keyframes wave {
+                0%, 100% { height: 10px; }
+                50% { height: 30px; }
+            }
+            .animate-fade-in-up {
+                animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+            @keyframes fadeInUp {
+                from { opacity: 0; transform: translateY(20px) scale(0.95); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+        `}</style>
+      </div >
+
+      {/* Order Confirmation Modal - Kept as before */}
       {parsedOrder && <OrderConfirmationModal isOpen={showConfirmation} onClose={() => setShowConfirmation(false)} onConfirm={handleConfirmOrder} onEdit={handleEditOrder} parsedOrder={parsedOrder} confirmationMessage={VoiceOrderProcessor.generateConfirmationMessage(parsedOrder)} />}
     </>
   );

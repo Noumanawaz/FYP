@@ -51,15 +51,22 @@ export async function speakWithUplift(
   const audio = new Audio(audioUrl);
 
   // Clean up the object URL after playback ends
-  audio.addEventListener('ended', () => {
-    URL.revokeObjectURL(audioUrl);
-  }, { once: true });
+  return new Promise((resolve, reject) => {
+    // Clean up the object URL after playback ends
+    audio.addEventListener('ended', () => {
+      URL.revokeObjectURL(audioUrl);
+      resolve({ duration: audioDuration });
+    }, { once: true });
 
-  await audio.play().catch(() => {
-    // Clean up on play error
-    URL.revokeObjectURL(audioUrl);
-    // Swallow play errors due to user gesture restrictions; caller can decide fallback
+    audio.addEventListener('error', (e) => {
+      URL.revokeObjectURL(audioUrl);
+      reject(e);
+    });
+
+    audio.play().catch((err) => {
+      // Clean up on play error
+      URL.revokeObjectURL(audioUrl);
+      reject(err);
+    });
   });
-
-  return { duration: audioDuration };
 }

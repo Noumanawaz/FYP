@@ -26,6 +26,7 @@ export const useSpeechRecognition = () => {
   });
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const finalTranscriptRef = useRef(''); // Stores committed final text
 
   useEffect(() => {
     // Check if speech recognition is supported
@@ -49,24 +50,40 @@ export const useSpeechRecognition = () => {
     };
 
     recognition.onresult = (event: any) => {
-      let finalTranscript = '';
+      let interimTranscript = '';
+      let newFinalSegments = '';
+
+      // The API returns a list of results. resultIndex tells us where the *new* results start.
+      // However, for robustness with continuous=true, we can rely on our own accumulation 
+      // via resultIndex or just parse new segments.
+      // Note: In some browsers, 'event.results' accumulates. In others it might not. 
+      // 'resultIndex' is the standard way to know what's new.
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+        const transcriptSegment = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += transcript;
+          newFinalSegments += transcriptSegment;
+        } else {
+          interimTranscript += transcriptSegment;
         }
       }
 
-      if (finalTranscript) {
-        setState(prev => ({
-          ...prev,
-          transcript: prev.transcript + finalTranscript,
-        }));
+      if (newFinalSegments) {
+        finalTranscriptRef.current += newFinalSegments;
       }
+
+      // Update state with (History + Interim)
+      // We do NOT add interim to finalTranscriptRef
+      setState(prev => ({
+        ...prev,
+        transcript: finalTranscriptRef.current + interimTranscript,
+      }));
     };
 
     recognition.onerror = (event: any) => {
+      // Ignore "no-speech" errors as they are common and benign
+      if (event.error === 'no-speech') return;
+
       setState(prev => ({
         ...prev,
         error: `Speech recognition error: ${event.error}`,
@@ -92,8 +109,28 @@ export const useSpeechRecognition = () => {
 
   const startListening = useCallback(() => {
     if (recognitionRef.current && !state.isListening) {
-      setState(prev => ({ ...prev, transcript: '', error: null }));
-      recognitionRef.current.start();
+      // Clear history on new start? default behavior often expects this for a "new turn".
+      // But if we want to append, we wouldn't clear. 
+      // Given the Modal clears on send, clearing here is safe/expected for a "start".
+      // Wait: `resetTranscript` is separate. manual start should probably NOT clear automatically 
+      // unless we want fresh context. Let's keep it safe: Don't clear ref unless reset called.
+      // Actually, standard usage usually implies start = resume or new. 
+      // Let's just start.
+
+      // FIX: If we stopped, finalTranscriptRef has the old text. 
+      // The transcript state has old text.
+      // If we start again, `recognition` might continue or reset?
+      // With `continuous=true`, stopping and starting usually resets the internal recognition session buffer.
+      // So `resultIndex` will reset to 0. 
+      // If we don't clear `finalTranscriptRef`, we append to it.
+      // This is good for "pausing" behavior.
+
+      setState(prev => ({ ...prev, error: null }));
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error("Failed to start recognition", e);
+      }
     }
   }, [state.isListening]);
 
@@ -104,6 +141,7 @@ export const useSpeechRecognition = () => {
   }, [state.isListening]);
 
   const resetTranscript = useCallback(() => {
+    finalTranscriptRef.current = '';
     setState(prev => ({ ...prev, transcript: '' }));
   }, []);
 
