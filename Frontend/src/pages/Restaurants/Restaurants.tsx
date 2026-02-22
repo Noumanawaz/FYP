@@ -46,16 +46,18 @@ const Restaurants: React.FC = () => {
   const lastFetchedLocation = useRef<{ lat: number; lng: number } | null>(null);
   const isInitialMount = useRef(true);
 
+  const hasFetchedRef = useRef(false);
+
   // Fetch restaurants on mount and when location changes
   useEffect(() => {
-    // Skip if already loading
+    // Skip if already loading or if we've already fetched in strict mode for this exact location
     if (loading) return;
 
     const currentLat = userLocation.lat;
     const currentLng = userLocation.lng;
 
     // Check if location has actually changed
-    const locationChanged = 
+    const locationChanged =
       !lastFetchedLocation.current ||
       lastFetchedLocation.current.lat !== currentLat ||
       lastFetchedLocation.current.lng !== currentLng;
@@ -65,8 +67,13 @@ const Restaurants: React.FC = () => {
       return;
     }
 
+    // Strict mode protection
+    if (hasFetchedRef.current && !locationChanged) {
+      return;
+    }
+
     console.log("🔍 Fetching restaurants...", { lat: currentLat, lng: currentLng });
-    
+
     if (currentLat && currentLng) {
       // Fetch nearby restaurants if location is available
       console.log("📍 Fetching nearby restaurants with lat:", currentLat, "lng:", currentLng);
@@ -80,6 +87,7 @@ const Restaurants: React.FC = () => {
     }
 
     isInitialMount.current = false;
+    hasFetchedRef.current = true;
   }, [dispatch, userLocation.lat, userLocation.lng, loading]); // Re-fetch when location changes
 
   // Update restaurants when Redux state changes
@@ -241,7 +249,7 @@ const Restaurants: React.FC = () => {
         <div className="absolute inset-0 bg-primary-900/5 z-0"></div>
         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="text-center md:text-left">
@@ -251,68 +259,68 @@ const Restaurants: React.FC = () => {
               <p className="text-lg text-gray-600 max-w-xl">
                 Discover the best food from over <span className="font-semibold text-gray-900">{restaurants.length}</span> restaurants delivered to your doorstep.
               </p>
-              
+
               <div className="flex items-center space-x-2 mt-6 justify-center md:justify-start">
-                 <div className="flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-100">
-                    <MapPin className="w-4 h-4 text-primary-500 mr-2" />
-                    <span className="text-sm font-medium text-gray-700">{state.selectedAddress?.address || "Detecting location..."}</span>
-                 </div>
+                <div className="flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-100">
+                  <MapPin className="w-4 h-4 text-primary-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-700">{state.selectedAddress?.address || "Detecting location..."}</span>
+                </div>
               </div>
             </div>
-            
+
             {/* Search Box */}
             <div className="w-full md:w-auto md:min-w-[400px]">
-               <div className="bg-white p-2 rounded-2xl shadow-xl border border-gray-100 flex items-center">
-                  <Search className="w-5 h-5 text-gray-400 ml-3" />
-                  <input 
-                    type="text" 
-                    placeholder="Search for restaurants or dishes..." 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                    className="flex-1 px-4 py-3 bg-transparent border-none focus:ring-0 text-gray-900 placeholder-gray-400"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery("")} className="p-2 text-gray-400 hover:text-gray-600">
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-               </div>
-               
-               <div className="mt-4 flex items-center justify-between">
-                 <div className="flex space-x-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={() => setIsFilterOpen(true)} 
-                      leftIcon={<Filter className="w-3.5 h-3.5" />}
-                      className="rounded-xl border-gray-200 hover:bg-gray-50 text-gray-600"
-                    >
-                      Filters {getActiveFilterCount() > 0 && <span className="ml-1 bg-primary-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{getActiveFilterCount()}</span>}
-                    </Button>
-                    
-                    <select 
-                      value={filters.sortBy} 
-                      onChange={(e) => handleFilterChange("sortBy", e.target.value)} 
-                      className="pl-3 pr-8 py-1.5 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-600 outline-none cursor-pointer hover:bg-gray-50"
-                    >
-                      <option value="distance">Nearest</option>
-                      <option value="rating">Top Rated</option>
-                      <option value="delivery_time">Fastest</option>
-                      <option value="popularity">Popular</option>
-                      <option value="price_low_to_high">Cost: Low to High</option>
-                      <option value="price_high_to_low">Cost: High to Low</option>
-                    </select>
-                 </div>
-                 
-                  <div className="hidden md:flex bg-gray-100 p-1 rounded-xl">
-                    <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-lg transition-all ${viewMode === "grid" ? "bg-white shadow-sm text-primary-600" : "text-gray-500 hover:text-gray-700"}`}>
-                      <Grid className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-lg transition-all ${viewMode === "list" ? "bg-white shadow-sm text-primary-600" : "text-gray-500 hover:text-gray-700"}`}>
-                      <List className="w-4 h-4" />
-                    </button>
-                  </div>
-               </div>
+              <div className="bg-white p-2 rounded-2xl shadow-xl border border-gray-100 flex items-center">
+                <Search className="w-5 h-5 text-gray-400 ml-3" />
+                <input
+                  type="text"
+                  placeholder="Search for restaurants or dishes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-1 px-4 py-3 bg-transparent border-none focus:ring-0 text-gray-900 placeholder-gray-400"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="p-2 text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsFilterOpen(true)}
+                    leftIcon={<Filter className="w-3.5 h-3.5" />}
+                    className="rounded-xl border-gray-200 hover:bg-gray-50 text-gray-600"
+                  >
+                    Filters {getActiveFilterCount() > 0 && <span className="ml-1 bg-primary-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{getActiveFilterCount()}</span>}
+                  </Button>
+
+                  <select
+                    value={filters.sortBy}
+                    onChange={(e) => handleFilterChange("sortBy", e.target.value)}
+                    className="pl-3 pr-8 py-1.5 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-600 outline-none cursor-pointer hover:bg-gray-50"
+                  >
+                    <option value="distance">Nearest</option>
+                    <option value="rating">Top Rated</option>
+                    <option value="delivery_time">Fastest</option>
+                    <option value="popularity">Popular</option>
+                    <option value="price_low_to_high">Cost: Low to High</option>
+                    <option value="price_high_to_low">Cost: High to Low</option>
+                  </select>
+                </div>
+
+                <div className="hidden md:flex bg-gray-100 p-1 rounded-xl">
+                  <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-lg transition-all ${viewMode === "grid" ? "bg-white shadow-sm text-primary-600" : "text-gray-500 hover:text-gray-700"}`}>
+                    <Grid className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-lg transition-all ${viewMode === "list" ? "bg-white shadow-sm text-primary-600" : "text-gray-500 hover:text-gray-700"}`}>
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -320,26 +328,26 @@ const Restaurants: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 -mt-8 relative z-20">
-        
+
         {/* Nearby Alert */}
         {nearbyRestaurants.length > 0 && (
-           <div className="mb-6 flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 animate-slide-up">
-              <div className="flex items-center">
-                 <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center mr-3">
-                    <Navigation className="w-5 h-5 text-primary-600" />
-                 </div>
-                 <div>
-                    <h3 className="font-semibold text-gray-900">Nearby Favorites</h3>
-                    <p className="text-xs text-gray-500">Showing {filteredRestaurants.length} restaurants within 15km of you</p>
-                 </div>
+          <div className="mb-6 flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 animate-slide-up">
+            <div className="flex items-center">
+              <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center mr-3">
+                <Navigation className="w-5 h-5 text-primary-600" />
               </div>
-              {restaurants.length < reduxRestaurants.length && (
-                 <div className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full font-medium flex items-center">
-                    <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
-                    Some places hidden (too far)
-                 </div>
-              )}
-           </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Nearby Favorites</h3>
+                <p className="text-xs text-gray-500">Showing {filteredRestaurants.length} restaurants within 15km of you</p>
+              </div>
+            </div>
+            {restaurants.length < reduxRestaurants.length && (
+              <div className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full font-medium flex items-center">
+                <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
+                Some places hidden (too far)
+              </div>
+            )}
+          </div>
         )}
 
         {/* Active Filters Display */}
@@ -412,7 +420,7 @@ const Restaurants: React.FC = () => {
             <div className={`grid gap-8 ${viewMode === "grid" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" : "grid-cols-1 max-w-3xl mx-auto"}`}>
               {filteredRestaurants.map((restaurant, index) => (
                 <div key={restaurant.id} className="animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
-                   <RestaurantCard restaurant={restaurant} />
+                  <RestaurantCard restaurant={restaurant} />
                 </div>
               ))}
             </div>
@@ -444,18 +452,18 @@ const Restaurants: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
             <div className="p-6 border-b border-gray-100 sticky top-0 bg-white z-10 flex items-center justify-between">
-               <h3 className="text-xl font-bold text-gray-900">Filter Restaurants</h3>
-               <button onClick={() => setIsFilterOpen(false)} className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 transition-colors">
-                  <X className="w-5 h-5" />
-               </button>
+              <h3 className="text-xl font-bold text-gray-900">Filter Restaurants</h3>
+              <button onClick={() => setIsFilterOpen(false)} className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="p-6 space-y-8">
               {/* Cuisine Filter */}
               <div>
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center">
-                   <span className="w-1 h-5 bg-primary-500 rounded-full mr-2"></span>
-                   Cuisines
+                  <span className="w-1 h-5 bg-primary-500 rounded-full mr-2"></span>
+                  Cuisines
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {cuisines.map((cuisine) => (
@@ -470,8 +478,8 @@ const Restaurants: React.FC = () => {
               {/* Rating Filter */}
               <div>
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center">
-                   <span className="w-1 h-5 bg-yellow-400 rounded-full mr-2"></span>
-                   Minimum Rating
+                  <span className="w-1 h-5 bg-yellow-400 rounded-full mr-2"></span>
+                  Minimum Rating
                 </h4>
                 <div className="space-y-3">
                   {[4.5, 4.0, 3.5].map((rating) => (
@@ -480,9 +488,9 @@ const Restaurants: React.FC = () => {
                       <div className="ml-3 flex items-center">
                         <span className="font-semibold text-gray-900 mr-2">{rating}+</span>
                         <div className="flex">
-                           {[...Array(5)].map((_, i) => (
-                              <Star key={i} className={`w-4 h-4 ${i < Math.floor(rating) ? "text-yellow-400 fill-current" : "text-gray-300"}`} />
-                           ))}
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`w-4 h-4 ${i < Math.floor(rating) ? "text-yellow-400 fill-current" : "text-gray-300"}`} />
+                          ))}
                         </div>
                       </div>
                     </label>
@@ -492,30 +500,30 @@ const Restaurants: React.FC = () => {
 
               {/* Delivery Time & Price */}
               <div className="grid grid-cols-2 gap-6">
-                 <div>
-                    <h4 className="font-bold text-gray-900 mb-4">Max Time</h4>
-                    <select 
-                       value={filters.deliveryTime || ""} 
-                       onChange={(e) => handleFilterChange("deliveryTime", e.target.value ? Number(e.target.value) : undefined)}
-                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    >
-                       <option value="">Any time</option>
-                       <option value="30">Under 30 min</option>
-                       <option value="45">Under 45 min</option>
-                       <option value="60">Under 60 min</option>
-                    </select>
-                 </div>
-                 <div>
-                    <h4 className="font-bold text-gray-900 mb-4">Price Range</h4>
-                    <select 
-                       value={filters.priceRange || ""} 
-                       onChange={(e) => handleFilterChange("priceRange", e.target.value || undefined)}
-                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    >
-                       <option value="">Any price</option>
-                       {priceRanges.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                    </select>
-                 </div>
+                <div>
+                  <h4 className="font-bold text-gray-900 mb-4">Max Time</h4>
+                  <select
+                    value={filters.deliveryTime || ""}
+                    onChange={(e) => handleFilterChange("deliveryTime", e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="">Any time</option>
+                    <option value="30">Under 30 min</option>
+                    <option value="45">Under 45 min</option>
+                    <option value="60">Under 60 min</option>
+                  </select>
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-900 mb-4">Price Range</h4>
+                  <select
+                    value={filters.priceRange || ""}
+                    onChange={(e) => handleFilterChange("priceRange", e.target.value || undefined)}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="">Any price</option>
+                    {priceRanges.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </div>
               </div>
 
               {/* Toggles */}
@@ -523,15 +531,15 @@ const Restaurants: React.FC = () => {
                 <label className="flex items-center justify-between p-1 cursor-pointer">
                   <span className="font-medium text-gray-900">Vegetarian Only</span>
                   <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full border border-gray-200 bg-gray-100 has-[:checked]:bg-green-500">
-                     <input type="checkbox" checked={filters.isVegetarian} onChange={(e) => handleFilterChange("isVegetarian", e.target.checked)} className="peer sr-only" />
-                     <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-6"></span>
+                    <input type="checkbox" checked={filters.isVegetarian} onChange={(e) => handleFilterChange("isVegetarian", e.target.checked)} className="peer sr-only" />
+                    <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-6"></span>
                   </div>
                 </label>
                 <label className="flex items-center justify-between p-1 cursor-pointer">
                   <span className="font-medium text-gray-900">Show Closed Restaurants</span>
                   <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full border border-gray-200 bg-gray-100 has-[:checked]:bg-primary-500">
-                     <input type="checkbox" checked={!filters.isOpen} onChange={(e) => handleFilterChange("isOpen", !e.target.checked)} className="peer sr-only" />
-                     <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-6"></span>
+                    <input type="checkbox" checked={!filters.isOpen} onChange={(e) => handleFilterChange("isOpen", !e.target.checked)} className="peer sr-only" />
+                    <span className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-6"></span>
                   </div>
                 </label>
               </div>

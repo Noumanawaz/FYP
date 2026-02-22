@@ -15,6 +15,9 @@ import Signup from "./pages/Signup/Signup";
 import RestaurantOwnerDashboard from "./pages/RestaurantOwner/RestaurantOwnerDashboard";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
+import Checkout from "./pages/Checkout/Checkout";
+import OrderSuccess from "./pages/Orders/OrderSuccess";
+import Orders from "./pages/Orders/Orders";
 
 function App() {
   return (
@@ -30,8 +33,9 @@ function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="vocabite-mart" element={<div className="p-8 text-center">Vocabite Mart - Coming Soon</div>} />
-              <Route path="orders" element={<div className="p-8 text-center">Orders - Coming Soon</div>} />
-              <Route path="checkout" element={<div className="p-8 text-center">Checkout - Coming Soon</div>} />
+              <Route path="orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+              <Route path="checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+              <Route path="orders/success" element={<ProtectedRoute><OrderSuccess /></ProtectedRoute>} />
             </Route>
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />

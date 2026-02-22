@@ -9,10 +9,10 @@ interface ProtectedRouteProps {
   redirectTo?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
   requiredRole,
-  redirectTo 
+  redirectTo
 }) => {
   const { state, dispatch } = useApp();
   const user = state.user;
@@ -23,15 +23,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   useEffect(() => {
     // Prevent multiple checks
-    if (hasCheckedRef.current && isAuthorized) {
+    if (hasCheckedRef.current) {
       return;
     }
+    hasCheckedRef.current = true;
 
     let isMounted = true;
-    
+
     const checkAuth = async () => {
       const token = apiService.getToken();
-      
+
       if (!token) {
         console.log('[ProtectedRoute] No token found, redirecting to login');
         if (isMounted) {
@@ -41,45 +42,43 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         return;
       }
 
-      // If user is already in context and role matches, authorize immediately
-      if (user && user.role === requiredRole) {
-        console.log('[ProtectedRoute] User already in context with correct role, authorizing');
-        if (isMounted) {
-          hasCheckedRef.current = true;
-          setIsAuthorized(true);
-          setIsChecking(false);
-        }
-        return;
-      }
-
-      // If user exists but role doesn't match, redirect immediately
-      if (user && user.role !== requiredRole) {
-        console.log('[ProtectedRoute] User role mismatch, redirecting. User role:', user.role, 'Required:', requiredRole);
-        if (isMounted) {
-          setIsChecking(false);
-          if (user.role === 'admin') {
-            navigate('/admin');
-          } else if (user.role === 'restaurant_owner') {
-            navigate('/restaurant-owner');
-          } else {
-            navigate('/dashboard');
+      // If user is already in context
+      if (user) {
+        if (!requiredRole || user.role === requiredRole) {
+          console.log('[ProtectedRoute] User already in context and authorized');
+          if (isMounted) {
+            setIsAuthorized(true);
+            setIsChecking(false);
           }
+          return;
+        } else {
+          console.log('[ProtectedRoute] User role mismatch, redirecting. User role:', user.role, 'Required:', requiredRole);
+          if (isMounted) {
+            setIsChecking(false);
+            if (user.role === 'admin') {
+              navigate('/admin');
+            } else if (user.role === 'restaurant_owner') {
+              navigate('/restaurant-owner');
+            } else {
+              navigate('/dashboard');
+            }
+          }
+          return;
         }
-        return;
       }
 
       // User not in context yet - decode JWT token to get role (instant, no API call)
       console.log('[ProtectedRoute] User not in context, decoding token...');
-      
+
       try {
         const tokenParts = token.split('.');
         if (tokenParts.length === 3) {
           const payload = JSON.parse(atob(tokenParts[1]));
           const tokenRole = payload.role;
           const tokenUserId = payload.user_id;
-          
+
           console.log('[ProtectedRoute] Decoded token - Role:', tokenRole, 'User ID:', tokenUserId, 'Required:', requiredRole);
-          
+
           if (tokenRole && tokenUserId) {
             // Check role requirement
             if (requiredRole && tokenRole !== requiredRole) {
@@ -97,10 +96,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
               }
               return;
             }
-            
+
             // Role matches - authorize immediately
             console.log('[ProtectedRoute] Token role matches! Authorizing...');
-            
+
             // Update context with token data
             dispatch({
               type: 'SET_USER',
@@ -116,40 +115,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
                 createdAt: new Date(),
               },
             });
-            
+
             // Set authorized state - use setTimeout to ensure state update happens
             if (isMounted) {
               console.log('[ProtectedRoute] Setting state: isAuthorized=true, isChecking=false');
-              hasCheckedRef.current = true;
               setIsAuthorized(true);
               setIsChecking(false);
               console.log('[ProtectedRoute] State updated');
             }
-            
-            // Fetch full user details in background (non-blocking)
-            setTimeout(() => {
-              apiService.getUser(tokenUserId).then(userResponse => {
-                if (userResponse.success && userResponse.data) {
-                  dispatch({
-                    type: 'SET_USER',
-                    payload: {
-                      id: userResponse.data.user_id,
-                      email: userResponse.data.email || '',
-                      phone: userResponse.data.phone || '',
-                      name: userResponse.data.name,
-                      role: userResponse.data.role as 'customer' | 'restaurant_owner' | 'admin',
-                      isVerified: true,
-                      addresses: [],
-                      paymentMethods: [],
-                      createdAt: new Date(),
-                    },
-                  });
-                }
-              }).catch(err => {
-                console.warn('[ProtectedRoute] Failed to fetch user details:', err);
-              });
-            }, 100);
-            
+
             return; // Exit early, no API call needed
           }
         }
@@ -157,13 +131,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         console.error('[ProtectedRoute] Could not decode token:', e);
         // Fall through to API verification
       }
-      
+
       // Fallback: API verification (only if token decode fails)
       console.log('[ProtectedRoute] Falling back to API verification...');
       try {
         const verifyResponse = await apiService.verifyToken(token);
         if (!isMounted) return;
-        
+
         if (!verifyResponse.success || !verifyResponse.data?.valid || !verifyResponse.data?.user_id) {
           console.error('[ProtectedRoute] Token verification failed');
           apiService.setToken(null);
@@ -176,7 +150,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
         const userResponse = await apiService.getUser(verifyResponse.data.user_id);
         if (!isMounted) return;
-        
+
         if (!userResponse.success || !userResponse.data) {
           console.error('[ProtectedRoute] Failed to fetch user');
           apiService.setToken(null);
@@ -234,7 +208,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     };
 
     checkAuth();
-    
+
     return () => {
       isMounted = false;
     };

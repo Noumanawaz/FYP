@@ -445,18 +445,6 @@ export class ApiService {
     return this.request(`/menu/restaurant/${restaurantId}${query ? `?${query}` : ""}`);
   }
 
-  async getCategories(restaurantId: string, params?: { is_active?: boolean }) {
-    const queryParams = new URLSearchParams({ restaurant_id: restaurantId });
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          queryParams.append(key, String(value));
-        }
-      });
-    }
-    return this.request(`/categories?${queryParams.toString()}`);
-  }
-
   async createCategory(categoryData: {
     restaurant_id: string;
     name: string;
@@ -519,7 +507,7 @@ export class ApiService {
     const token = this.getToken();
     const url = `${this.baseURL}/images/upload`;
     const headers: Record<string, string> = {};
-    
+
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -551,7 +539,7 @@ export class ApiService {
     const token = this.getToken();
     const url = `${this.baseURL}/images/upload/multiple`;
     const headers: Record<string, string> = {};
-    
+
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -629,6 +617,30 @@ export class ApiService {
 
   async getOrder(orderId: string) {
     return this.request(`/orders/${orderId}`);
+  }
+
+  async updateOrderStatus(orderId: string, status: string) {
+    return this.request(`/orders/${orderId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async getRestaurantOrders(restaurantId: string, params?: { page?: number; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    return this.request(`/orders/restaurant/${restaurantId}/history${query ? `?${query}` : ""}`);
+  }
+
+  async getOrderItems(orderId: string) {
+    return this.request(`/orders/${orderId}/items`);
   }
 }
 

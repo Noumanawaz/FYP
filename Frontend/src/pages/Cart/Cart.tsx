@@ -1,11 +1,12 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Trash2, ShoppingBag, X } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import Button from '../../components/Common/Button';
 
 const Cart: React.FC = () => {
   const { state, dispatch } = useApp();
+  const navigate = useNavigate();
   const cart = state.cart;
 
   const deliveryFee = cart.deliveryFee || 35;
@@ -77,7 +78,7 @@ const Cart: React.FC = () => {
                       className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
                     />
                   )}
-                  
+
                   <div className="flex-1">
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="font-semibold text-gray-900">{item.menuItem.name}</h3>
@@ -88,11 +89,11 @@ const Cart: React.FC = () => {
                         <X className="w-5 h-5" />
                       </button>
                     </div>
-                    
+
                     <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                       {item.menuItem.description}
                     </p>
-                    
+
                     {item.customizations && item.customizations.length > 0 && (
                       <div className="text-xs text-gray-500 mb-2">
                         <span className="font-medium">Customizations: </span>
@@ -104,7 +105,7 @@ const Cart: React.FC = () => {
                         ))}
                       </div>
                     )}
-                    
+
                     {item.addons && item.addons.length > 0 && (
                       <div className="text-xs text-gray-500 mb-2">
                         <span className="font-medium">Add-ons: </span>
@@ -116,18 +117,18 @@ const Cart: React.FC = () => {
                         ))}
                       </div>
                     )}
-                    
+
                     {item.specialInstructions && (
                       <p className="text-xs text-gray-500 mb-3">
                         <span className="font-medium">Note: </span>{item.specialInstructions}
                       </p>
                     )}
-                    
+
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-lg text-primary-600">
                         PKR {item.price.toLocaleString()}
                       </span>
-                      
+
                       <div className="flex items-center space-x-3 bg-gray-50 rounded-lg px-3 py-2">
                         <button
                           onClick={() => updateCartItem(item.id, item.quantity - 1)}
@@ -136,9 +137,9 @@ const Cart: React.FC = () => {
                         >
                           <Minus className="w-4 h-4" />
                         </button>
-                        
+
                         <span className="w-8 text-center font-medium">{item.quantity}</span>
-                        
+
                         <button
                           onClick={() => updateCartItem(item.id, item.quantity + 1)}
                           className="w-8 h-8 rounded-full bg-primary-500 text-white flex items-center justify-center hover:bg-primary-600 transition-colors"
@@ -151,7 +152,7 @@ const Cart: React.FC = () => {
                 </div>
               </div>
             ))}
-            
+
             <div className="pt-4">
               <Button
                 variant="outline"
@@ -168,30 +169,30 @@ const Cart: React.FC = () => {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl p-6 shadow-sm sticky top-24">
               <h3 className="text-xl font-bold text-gray-900 mb-6">Order Summary</h3>
-              
+
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-medium">PKR {cart.subtotal.toFixed(2)}</span>
                 </div>
-                
+
                 <div className="flex justify-between">
                   <span className="text-gray-600">Delivery Fee</span>
                   <span className="font-medium">PKR {deliveryFee.toFixed(2)}</span>
                 </div>
-                
+
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax & Fees</span>
                   <span className="font-medium">PKR {tax.toFixed(2)}</span>
                 </div>
-                
+
                 {cart.discount > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>Discount</span>
                     <span>-PKR {cart.discount.toFixed(2)}</span>
                   </div>
                 )}
-                
+
                 <div className="border-t border-gray-200 pt-4">
                   <div className="flex justify-between font-bold text-lg">
                     <span className="text-gray-900">Total</span>
@@ -199,19 +200,17 @@ const Cart: React.FC = () => {
                   </div>
                 </div>
               </div>
-              
-              <Link to="/checkout" className="block mt-6">
-                <Button className="w-full">
-                  Proceed to Checkout
-                </Button>
-              </Link>
-              
+
+              <Button className="w-full mt-6" onClick={() => navigate('/checkout')}>
+                Proceed to Checkout
+              </Button>
+
               <Link to="/restaurants" className="block mt-3">
                 <Button variant="outline" className="w-full">
                   Continue Shopping
                 </Button>
               </Link>
-              
+
               {/* Promo Code */}
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <div className="flex gap-2">

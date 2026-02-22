@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { User, Cart, Order, Restaurant, Notification, Address, PaymentMethod, CartItem } from '../types';
+import { User, Cart, Order, Restaurant, Notification, Address, CartItem } from '../types';
 import { apiService } from '../services/api';
 
 interface AppState {
@@ -16,7 +16,7 @@ interface AppState {
   error: string | null;
 }
 
-type AppAction = 
+type AppAction =
   | { type: 'SET_USER'; payload: User | null }
   | { type: 'LOGOUT' }
   | { type: 'SET_CART'; payload: Cart }
@@ -33,6 +33,7 @@ type AppAction =
   | { type: 'SET_ADDRESS'; payload: Address }
   | { type: 'SET_RESTAURANTS'; payload: Restaurant[] }
   | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_VERIFYING_AUTH'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null };
 
 const initialState: AppState = {
@@ -62,7 +63,7 @@ function calculateCartTotals(items: CartItem[]): { subtotal: number; tax: number
   const tax = subtotal * 0.08; // 8% tax
   const deliveryFee = 35; // Fixed delivery fee
   const total = subtotal + tax + deliveryFee;
-  
+
   return { subtotal, tax, total };
 }
 
@@ -99,7 +100,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       );
 
       let newItems: CartItem[];
-      
+
       if (existingItemIndex !== -1) {
         // Item already exists, increment quantity
         newItems = state.cart.items.map((item, index) => {
@@ -117,9 +118,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
         // New item, add to cart
         newItems = [...state.cart.items, action.payload];
       }
-      
+
       const { subtotal, tax, total } = calculateCartTotals(newItems);
-      
+
       return {
         ...state,
         cart: {
@@ -138,7 +139,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
           : item
       );
       const { subtotal, tax, total } = calculateCartTotals(updatedItems);
-      
+
       return {
         ...state,
         cart: {
@@ -153,7 +154,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'REMOVE_FROM_CART': {
       const filteredItems = state.cart.items.filter(item => item.id !== action.payload);
       const { subtotal, tax, total } = calculateCartTotals(filteredItems);
-      
+
       return {
         ...state,
         cart: {
@@ -273,7 +274,13 @@ const convertBackendAddresses = (backendAddresses: any[]): Address[] => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  const hasInitialized = React.useRef(false);
+
   useEffect(() => {
+    // Prevent strict mode double-firing
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
     // Initialize app data
     const initializeApp = async () => {
       try {
@@ -286,18 +293,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               // Token is valid, fetch user data from database to get actual role
               const userResponse = await apiService.getUser(response.data.user_id);
               if (userResponse.success && userResponse.data) {
+                const userData = userResponse.data as any;
                 dispatch({
                   type: 'SET_USER',
                   payload: {
-                    id: userResponse.data.user_id,
-                    email: userResponse.data.email || '',
-                    phone: userResponse.data.phone || '',
-                    name: userResponse.data.name,
-                    role: userResponse.data.role as 'customer' | 'restaurant_owner' | 'admin',
+                    id: userData.user_id,
+                    email: userData.email || '',
+                    phone: userData.phone || '',
+                    name: userData.name,
+                    role: userData.role as 'customer' | 'restaurant_owner' | 'admin',
                     isVerified: true,
-                    addresses: convertBackendAddresses(userResponse.data.addresses),
+                    addresses: convertBackendAddresses(userData.addresses),
                     paymentMethods: [],
-                    createdAt: new Date(userResponse.data.created_at || Date.now()),
+                    createdAt: new Date(userData.created_at || Date.now()),
                   },
                 });
                 // Mark verification as complete
@@ -319,18 +327,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       if (verifyResponse.success && verifyResponse.data?.valid && verifyResponse.data?.user_id) {
                         const userResponse = await apiService.getUser(verifyResponse.data.user_id);
                         if (userResponse.success && userResponse.data) {
+                          const userData = userResponse.data as any;
                           dispatch({
                             type: 'SET_USER',
                             payload: {
-                              id: userResponse.data.user_id,
-                              email: userResponse.data.email || '',
-                              phone: userResponse.data.phone || '',
-                              name: userResponse.data.name,
-                              role: userResponse.data.role as any,
+                              id: userData.user_id,
+                              email: userData.email || '',
+                              phone: userData.phone || '',
+                              name: userData.name,
+                              role: userData.role as any,
                               isVerified: true,
-                              addresses: convertBackendAddresses(userResponse.data.addresses),
+                              addresses: convertBackendAddresses(userData.addresses),
                               paymentMethods: [],
-                              createdAt: new Date(userResponse.data.created_at || Date.now()),
+                              createdAt: new Date(userData.created_at || Date.now()),
                             },
                           });
                           dispatch({ type: 'SET_VERIFYING_AUTH', payload: false });
@@ -365,18 +374,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     if (verifyResponse.success && verifyResponse.data?.valid && verifyResponse.data?.user_id) {
                       const userResponse = await apiService.getUser(verifyResponse.data.user_id);
                       if (userResponse.success && userResponse.data) {
+                        const userData = userResponse.data as any;
                         dispatch({
                           type: 'SET_USER',
                           payload: {
-                            id: userResponse.data.user_id,
-                            email: userResponse.data.email || '',
-                            phone: userResponse.data.phone || '',
-                            name: userResponse.data.name,
-                            role: userResponse.data.role as any,
+                            id: userData.user_id,
+                            email: userData.email || '',
+                            phone: userData.phone || '',
+                            name: userData.name,
+                            role: userData.role as any,
                             isVerified: true,
-                            addresses: convertBackendAddresses(userResponse.data.addresses),
+                            addresses: convertBackendAddresses(userData.addresses),
                             paymentMethods: [],
-                            createdAt: new Date(userResponse.data.created_at || Date.now()),
+                            createdAt: new Date(userData.created_at || Date.now()),
                           },
                         });
                         dispatch({ type: 'SET_VERIFYING_AUTH', payload: false });

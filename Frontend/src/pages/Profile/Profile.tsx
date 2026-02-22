@@ -27,7 +27,7 @@ const Profile: React.FC = () => {
     if (state.isVerifyingAuth) {
       return;
     }
-    
+
     // Redirect to login if not authenticated (only after verification is complete)
     if (!state.isAuthenticated || !state.user) {
       navigate('/');
@@ -278,11 +278,10 @@ const Profile: React.FC = () => {
                         <button
                           key={type}
                           onClick={() => setNewAddress((prev) => ({ ...prev, type }))}
-                          className={`px-3 py-2 rounded-lg text-sm font-medium capitalize ${
-                            newAddress.type === type
+                          className={`px-3 py-2 rounded-lg text-sm font-medium capitalize ${newAddress.type === type
                               ? "bg-blue-600 text-white"
                               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          }`}
+                            }`}
                         >
                           {type}
                         </button>
@@ -341,13 +340,13 @@ const Profile: React.FC = () => {
               <div className="bg-white rounded-2xl p-6 shadow-sm">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Account Settings</h3>
                 <div className="space-y-4">
-                  <button className="w-full flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  <Link to="/orders" className="w-full flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="flex items-center space-x-3">
                       <Calendar className="w-5 h-5 text-gray-600" />
                       <span className="text-gray-900">Order History</span>
                     </div>
                     <span className="text-gray-400">→</span>
-                  </button>
+                  </Link>
                 </div>
               </div>
             </div>

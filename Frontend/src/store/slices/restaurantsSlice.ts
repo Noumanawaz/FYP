@@ -83,19 +83,40 @@ const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: numbe
 };
 
 // Async thunks
-export const fetchRestaurants = createAsyncThunk("restaurants/fetchAll", async (params?: { page?: number; limit?: number; search?: string; price_range?: string; categories?: string[] }) => {
-  try {
-    const response = await apiService.getRestaurants(params);
-    if (response.success && response.data) {
-      const data = response.data as any;
-      const restaurants = Array.isArray(data.restaurants) ? data.restaurants : data;
-      return Array.isArray(restaurants) ? restaurants : [];
+export const fetchRestaurants = createAsyncThunk(
+  "restaurants/fetchAll",
+  async (params?: { page?: number; limit?: number; search?: string; price_range?: string; categories?: string[] }) => {
+    try {
+      const response = await apiService.getRestaurants(params);
+      if (response.success && response.data) {
+        const data = response.data as any;
+        const restaurants = Array.isArray(data.restaurants) ? data.restaurants : data;
+        return Array.isArray(restaurants) ? restaurants : [];
+      }
+      throw new Error(response.error || "Failed to fetch restaurants");
+    } catch (error) {
+      throw error;
     }
-    throw new Error(response.error || "Failed to fetch restaurants");
-  } catch (error) {
-    throw error;
+  },
+  {
+    condition: (_, { getState }) => {
+      const state = getState() as { restaurants: RestaurantsState };
+      const { lastUpdateTime, loading, restaurants } = state.restaurants;
+
+      if (loading) return false;
+
+      // If we have cached restaurants and fetched recently (< 5 mins), don't fetch again
+      if (restaurants.length > 0 && lastUpdateTime) {
+        const timeDiff = Date.now() - lastUpdateTime;
+        if (timeDiff < 5 * 60 * 1000) {
+          console.log("Using cached all restaurants (Age: " + (timeDiff / 1000).toFixed(0) + "s)");
+          return false;
+        }
+      }
+      return true;
+    }
   }
-});
+);
 
 export const fetchRestaurantById = createAsyncThunk(
   "restaurants/fetchById",
@@ -129,7 +150,7 @@ export const searchRestaurants = createAsyncThunk("restaurants/search", async (k
 });
 
 export const fetchNearbyRestaurants = createAsyncThunk(
-  "restaurants/fetchNearby", 
+  "restaurants/fetchNearby",
   async (params: { lat: number; lng: number; radius?: number }) => {
     const response = await apiService.getNearbyRestaurants(params.lat, params.lng, params.radius);
     if (response.success && response.data) {
@@ -154,8 +175,8 @@ export const fetchNearbyRestaurants = createAsyncThunk(
 
         // If data is fresh (< 5 mins) and location is close (< 2km), use cache
         if (timeDiff < 5 * 60 * 1000 && distance < 2) {
-          console.log("Using cached nearby restaurants (Distance: " + distance.toFixed(2) + "km, Age: " + (timeDiff/1000).toFixed(0) + "s)");
-          return false; 
+          console.log("Using cached nearby restaurants (Distance: " + distance.toFixed(2) + "km, Age: " + (timeDiff / 1000).toFixed(0) + "s)");
+          return false;
         }
       }
       return true;
@@ -187,6 +208,7 @@ const restaurantsSlice = createSlice({
       .addCase(fetchRestaurants.fulfilled, (state, action) => {
         state.loading = false;
         state.restaurants = action.payload.map((r: any) => transformRestaurant(r));
+        state.lastUpdateTime = Date.now();
       })
       .addCase(fetchRestaurants.rejected, (state, action) => {
         state.loading = false;

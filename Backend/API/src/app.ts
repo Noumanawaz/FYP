@@ -49,12 +49,13 @@ app.use(cors(corsOptions));
 // Rate limiting - More lenient for development
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000"), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || (isDevelopment ? "1000" : "100")), // 1000 for dev, 100 for prod
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || (isDevelopment ? "100000" : "100")), // 100k for dev, 100 for prod
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   skip: (req) => {
     // Skip rate limiting for health checks and swagger docs
+    if (isDevelopment) return true; // Completely skip in dev if preferred, or use high limit
     return req.path === "/api/health" || req.path.startsWith("/api-docs");
   },
 });

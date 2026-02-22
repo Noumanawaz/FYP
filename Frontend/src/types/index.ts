@@ -141,7 +141,7 @@ export interface OrderItem {
   specialInstructions?: string;
 }
 
-export type OrderStatus = 
+export type OrderStatus =
   | 'pending'
   | 'confirmed'
   | 'preparing'
@@ -215,6 +215,7 @@ export interface CartItem {
   addons: Addon[];
   specialInstructions?: string;
   price: number;
+  restaurantId?: string;
 }
 
 export interface Cart {
