@@ -1,7 +1,7 @@
 // Use getEnvVar helper to support both Vite and Jest environments
 import { getEnvVar } from '../utils/env';
 
-const API_BASE_URL = getEnvVar('VITE_API_BASE_URL', 'http://localhost:3000/api/v1');
+const API_BASE_URL = getEnvVar('VITE_API_BASE_URL', '/api/v1');
 
 export interface ApiResponse<T = any> {
   success: boolean;

@@ -146,49 +146,7 @@ export class RestaurantService {
    * Get nearby restaurants within radius
    */
   static async getNearbyRestaurants(lat: number, lng: number, radiusKm: number = 15): Promise<{ restaurants: any[]; total: number }> {
-    const allRestaurants = await RestaurantModel.findActive();
-    const locations = await LocationModel.findAll();
-
-    // Group locations by restaurant
-    const restaurantLocations = new Map<string, typeof locations>();
-    locations.forEach((loc) => {
-      if (!restaurantLocations.has(loc.restaurant_id)) {
-        restaurantLocations.set(loc.restaurant_id, []);
-      }
-      restaurantLocations.get(loc.restaurant_id)!.push(loc);
-    });
-
-    // Calculate distances and filter
-    const nearbyRestaurants = [];
-
-    for (const restaurant of allRestaurants) {
-      const locs = restaurantLocations.get(restaurant.restaurant_id) || [];
-
-      for (const location of locs) {
-        if (location.lat && location.lng && location.status === "open") {
-          const distance = this.calculateDistance(lat, lng, location.lat, location.lng);
-
-          if (distance <= radiusKm) {
-            nearbyRestaurants.push({
-              ...restaurant,
-              location: {
-                location_id: location.location_id,
-                address: location.address,
-                city: location.city,
-                area: location.area,
-                lat: location.lat,
-                lng: location.lng,
-              },
-              distance: Math.round(distance * 100) / 100,
-            });
-            break; // Only add restaurant once (use nearest location)
-          }
-        }
-      }
-    }
-
-    // Sort by distance
-    nearbyRestaurants.sort((a, b) => a.distance - b.distance);
+    const nearbyRestaurants = await RestaurantModel.findNearby(lat, lng, radiusKm);
 
     return {
       restaurants: nearbyRestaurants,

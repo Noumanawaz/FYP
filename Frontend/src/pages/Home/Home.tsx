@@ -5,54 +5,7 @@ import { mockRestaurants } from "../../data/mockData";
 import { ShoppingCart } from "lucide-react";
 import VoiceOrderModal from "../../components/Voice/VoiceOrderModal";
 import { useApp } from "../../contexts/AppContext";
-
-// Typing Animation Component
-const TypingAnimation: React.FC = () => {
-  const [currentText, setCurrentText] = useState("");
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [textIndex, setTextIndex] = useState(0);
-
-  const texts = ["Welcome to Vocabite", "Now order food with your voice!", "Pakistan's first voice ordering platform", "Experience the future of food delivery", "Just speak and we'll deliver!"];
-
-  useEffect(() => {
-    const timeout = setTimeout(
-      () => {
-        const current = texts[textIndex];
-
-        if (!isDeleting) {
-          setCurrentText(current.substring(0, currentIndex + 1));
-          setCurrentIndex(currentIndex + 1);
-
-          if (currentIndex === current.length) {
-            setTimeout(() => setIsDeleting(true), 2000);
-          }
-        } else {
-          setCurrentText(current.substring(0, currentIndex - 1));
-          setCurrentIndex(currentIndex - 1);
-
-          if (currentIndex === 0) {
-            setIsDeleting(false);
-            setTextIndex((textIndex + 1) % texts.length);
-          }
-        }
-      },
-      isDeleting ? 50 : 100
-    );
-
-    return () => clearTimeout(timeout);
-  }, [currentIndex, isDeleting, textIndex, texts]);
-
-  return (
-    <div className="text-center">
-      <h1 className="text-5xl md:text-7xl font-bold text-white mb-4 tracking-wider" style={{ fontFamily: "Comic Sans MS, cursive" }}>
-        {currentText}
-        <span className="animate-pulse text-cyan-400">|</span>
-      </h1>
-      <div className="text-lg text-gray-400 font-mono">{">"} Pakistan's Premier Voice-Ordering Platform</div>
-    </div>
-  );
-};
+import BlurText from "../../components/Common/BlurText";
 
 // ⬇️ Map imports
 // ⬇️ add Circle import
@@ -141,11 +94,19 @@ const Home: React.FC = () => {
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-16 w-full">
-          {/* Main Layout - Left: Typing Animation, Right: Action Card */}
+          {/* Main Layout - Left: BlurText Animation, Right: Action Card */}
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Side: Typing Animation */}
-            <div className="flex flex-col justify-center">
-              <TypingAnimation />
+            {/* Left Side: BlurText Animation */}
+            <div className="flex flex-col justify-center items-center text-center">
+              <BlurText
+                text="Isn't this so cool?!"
+                delay={200}
+                animateBy="words"
+                direction="top"
+                onAnimationComplete={() => console.log('Animation completed!')}
+                className="text-[5rem] md:text-[6rem] leading-tight font-bold text-white mb-8 tracking-wider justify-center w-full"
+                style={{ fontFamily: "Comic Sans MS, cursive" }}
+              />
             </div>
 
             {/* Right Side: Action Card */}

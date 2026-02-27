@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { User, Cart, Order, Restaurant, Notification, Address, CartItem } from '../types';
 import { apiService } from '../services/api';
+import { geoapifyService } from '../services/geoapifyService';
 
 interface AppState {
   user: User | null;
@@ -410,30 +411,105 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // No token found, user is not authenticated
           dispatch({ type: 'SET_VERIFYING_AUTH', payload: false });
         }
+      } catch (error) {
+        console.error('Error initializing app:', error);
+      }
+    };
 
-        // Get user location (optional - don't fail if unavailable)
+    const initializeLocation = async () => {
+      // Get user location (optional - don't fail if unavailable)
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
-            (position) => {
+            async (position) => {
+              const lat = position.coords.latitude;
+              const lng = position.coords.longitude;
+              
               dispatch({
                 type: 'SET_LOCATION',
-                payload: {
-                  lat: position.coords.latitude,
-                  lng: position.coords.longitude,
-                },
+                payload: { lat, lng },
               });
+              
+              try {
+                // Automatically set a meaningful address for the dashboard
+                const addressText = await geoapifyService.reverseGeocode(lat, lng);
+                if (addressText) {
+                  const parts = addressText.split(',');
+                  // Address Line 1 or building name is usually the first part
+                  const shortName = parts[0]?.trim() || "Current Location";
+                  const city = parts[parts.length - 1]?.trim() || "Unknown";
+                  const address: Address = {
+                    id: `curr-${Date.now()}`,
+                    type: "other",
+                    label: shortName, // Meaningful building name or street
+                    address: addressText,
+                    city: city,
+                    coordinates: { lat, lng },
+                    isDefault: false,
+                  };
+                  dispatch({ type: 'SET_ADDRESS', payload: address });
+                } else {
+                  throw new Error("Empty address");
+                }
+              } catch (error) {
+                console.error('Auto reverse geocoding failed', error);
+                const address: Address = {
+                  id: `curr-${Date.now()}`,
+                  type: "other",
+                  label: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, // Fallback directly to coordinates
+                  address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                  city: "Unknown",
+                  coordinates: { lat, lng },
+                  isDefault: false,
+                };
+                dispatch({ type: 'SET_ADDRESS', payload: address });
+              }
             },
-            (error) => {
+            async (error) => {
               // Silently fall back to default location (Islamabad - where test restaurant is)
               // Only log if it's a permission issue (user might want to know)
               if (error.code === error.PERMISSION_DENIED) {
                 console.warn('Location access denied. Using default location.');
               }
               // Default to Islamabad (where test restaurant is located)
+              const defaultLat = 33.6844;
+              const defaultLng = 73.0479;
               dispatch({
                 type: 'SET_LOCATION',
-                payload: { lat: 33.6844, lng: 73.0479 }, // Islamabad, Pakistan
+                payload: { lat: defaultLat, lng: defaultLng }, // Islamabad, Pakistan
               });
+              
+              try {
+                const addressText = await geoapifyService.reverseGeocode(defaultLat, defaultLng);
+                if (addressText) {
+                  const parts = addressText.split(',');
+                  const shortName = parts[0]?.trim() || "Islamabad Center";
+                  const city = parts[parts.length - 1]?.trim() || "Islamabad";
+                  const address: Address = {
+                    id: `curr-${Date.now()}`,
+                    type: "other",
+                    label: shortName, 
+                    address: addressText,
+                    city: city,
+                    coordinates: { lat: defaultLat, lng: defaultLng },
+                    isDefault: false,
+                  };
+                  dispatch({ type: 'SET_ADDRESS', payload: address });
+                } else {
+                   throw new Error("Empty address");
+                }
+              } catch (e) {
+                console.error("Auto reverse geocoding default failed", e);
+                const address: Address = {
+                  id: `curr-${Date.now()}`,
+                  type: "other",
+                  label: `${defaultLat.toFixed(6)}, ${defaultLng.toFixed(6)}`, 
+                  address: `${defaultLat.toFixed(6)}, ${defaultLng.toFixed(6)}`,
+                  city: "Unknown",
+                  coordinates: { lat: defaultLat, lng: defaultLng },
+                  isDefault: false,
+                };
+                dispatch({ type: 'SET_ADDRESS', payload: address });
+              }
             },
             {
               enableHighAccuracy: false, // Don't require high accuracy
@@ -443,17 +519,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
         } else {
           // Browser doesn't support geolocation - use default
+          const defaultLat = 33.6844;
+          const defaultLng = 73.0479;
           dispatch({
             type: 'SET_LOCATION',
-            payload: { lat: 33.6844, lng: 73.0479 }, // Islamabad, Pakistan
+            payload: { lat: defaultLat, lng: defaultLng }, // Islamabad, Pakistan
           });
+          
+          try {
+            const addressText = await geoapifyService.reverseGeocode(defaultLat, defaultLng);
+            if (addressText) {
+              const parts = addressText.split(',');
+              const shortName = parts[0]?.trim() || "Islamabad Center";
+              const city = parts[parts.length - 1]?.trim() || "Islamabad";
+              const address: Address = {
+                id: `curr-${Date.now()}`,
+                type: "other",
+                label: shortName, 
+                address: addressText,
+                city: city,
+                coordinates: { lat: defaultLat, lng: defaultLng },
+                isDefault: false,
+              };
+              dispatch({ type: 'SET_ADDRESS', payload: address });
+            } else {
+               throw new Error("Empty address");
+            }
+          } catch (e) {
+             console.error("Auto reverse geocoding default failed", e);
+             const address: Address = {
+                id: `curr-${Date.now()}`,
+                type: "other",
+                label: `${defaultLat.toFixed(6)}, ${defaultLng.toFixed(6)}`, 
+                address: `${defaultLat.toFixed(6)}, ${defaultLng.toFixed(6)}`,
+                city: "Unknown",
+                coordinates: { lat: defaultLat, lng: defaultLng },
+                isDefault: false,
+             };
+             dispatch({ type: 'SET_ADDRESS', payload: address });
+          }
         }
-      } catch (error) {
-        console.error('Error initializing app:', error);
-      }
     };
 
     initializeApp();
+    initializeLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 

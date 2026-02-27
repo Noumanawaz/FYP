@@ -385,5 +385,58 @@ export class RestaurantModel {
 
     return result as Restaurant[];
   }
+
+  // Get nearby restaurants
+  static async findNearby(lat: number, lng: number, radiusKm: number): Promise<(Restaurant & { location: any, distance: number })[]> {
+    const result = await sql`
+      WITH RankedLocations AS (
+        SELECT 
+          l.location_id,
+          l.restaurant_id,
+          l.address,
+          l.city,
+          l.area,
+          l.lat,
+          l.lng,
+          (
+            6371 * acos(
+              LEAST(GREATEST(
+                cos(radians(${lat})) * cos(radians(l.lat)) *
+                cos(radians(l.lng) - radians(${lng})) +
+                sin(radians(${lat})) * sin(radians(l.lat))
+              , -1.0), 1.0)
+            )
+          ) AS distance
+        FROM restaurant_locations l
+        WHERE l.status = 'open' 
+          AND l.lat IS NOT NULL 
+          AND l.lng IS NOT NULL
+      ),
+      ClosestLocations AS (
+        SELECT DISTINCT ON (restaurant_id)
+          restaurant_id, location_id, address, city, area, lat, lng, distance
+        FROM RankedLocations
+        WHERE distance <= ${radiusKm}
+        ORDER BY restaurant_id, distance ASC
+      )
+      SELECT 
+        r.*,
+        json_build_object(
+          'location_id', cl.location_id,
+          'address', cl.address,
+          'city', cl.city,
+          'area', cl.area,
+          'lat', cl.lat,
+          'lng', cl.lng
+        ) as location,
+        ROUND(cl.distance::numeric, 2)::float as distance
+      FROM restaurants r
+      JOIN ClosestLocations cl ON r.restaurant_id = cl.restaurant_id
+      WHERE r.status = 'active'
+      ORDER BY cl.distance ASC
+    `;
+
+    return result as (Restaurant & { location: any, distance: number })[];
+  }
 }
 

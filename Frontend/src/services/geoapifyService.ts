@@ -4,7 +4,7 @@ import { getEnvVar } from '../utils/env';
 // Get API key lazily to avoid warnings at module load time
 // Vite needs to be restarted to pick up new env variables
 const getGeoapifyApiKey = (): string => {
-  return getEnvVar('VITE_GEOAPIFY_API_KEY', '');
+  return getEnvVar('VITE_GEOAPIFY_API_KEY', '') || import.meta.env.VITE_GEOAPIFY_API_KEY || '';
 };
 
 export interface GeocodeResult {
@@ -40,9 +40,18 @@ export class GeoapifyService {
     this.apiKey = apiKey;
     // Only warn once if key is missing and we're not in test mode
     if (!apiKey && process.env.NODE_ENV !== "test" && !this.warnedAboutMissingKey) {
-      console.info("ℹ️ VITE_GEOAPIFY_API_KEY not set - Geoapify features will be limited. Set it in your .env file and restart the dev server.");
+      console.info("ℹ️ VITE_GEOAPIFY_API_KEY not set initially. Will lazy load when needed.");
       this.warnedAboutMissingKey = true;
     }
+  }
+
+  // Lazy getter to dynamically check the env variables instead of caching forever
+  private get activeApiKey(): string {
+    if (this.apiKey) return this.apiKey;
+    const lazyKey = getGeoapifyApiKey();
+    console.log("[Geoapify] Lazy fetching API Key:", lazyKey ? "Found" : "Missing");
+    if (lazyKey) this.apiKey = lazyKey;
+    return this.apiKey;
   }
 
   /**
@@ -50,13 +59,14 @@ export class GeoapifyService {
    * Cost: 1 credit per request
    */
   async geocode(address: string): Promise<GeocodeResult | null> {
-    if (!this.apiKey) {
+    const key = this.activeApiKey;
+    if (!key) {
       console.warn("Geoapify API key not configured");
       return null;
     }
 
     try {
-      const url = `${this.baseUrl}/geocode/search?text=${encodeURIComponent(address)}&apiKey=${this.apiKey}&limit=1`;
+      const url = `${this.baseUrl}/geocode/search?text=${encodeURIComponent(address)}&apiKey=${key}&limit=1`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -95,13 +105,15 @@ export class GeoapifyService {
    * Cost: 1 credit per request
    */
   async reverseGeocode(lat: number, lng: number): Promise<string | null> {
-    if (!this.apiKey) {
+    const key = this.activeApiKey;
+    if (!key) {
       console.warn("Geoapify API key not configured");
       return null;
     }
 
     try {
-      const url = `${this.baseUrl}/geocode/reverse?lat=${lat}&lon=${lng}&apiKey=${this.apiKey}`;
+      const url = `${this.baseUrl}/geocode/reverse?lat=${lat}&lon=${lng}&apiKey=${key}`;
+      console.log(`[Geoapify] Fetching reverse geocode for lat:${lat} lng:${lng}`);
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -109,11 +121,13 @@ export class GeoapifyService {
       }
 
       const data = await response.json();
+      console.log(`[Geoapify] Reverse Geocode Response Features: ${data.features?.length || 0}`);
 
       if (data.features && data.features.length > 0) {
         return data.features[0].properties.formatted;
       }
 
+      console.warn(`[Geoapify] No features returned for coordinates ${lat}, ${lng}`);
       return null;
     } catch (error) {
       console.error("Reverse geocoding error:", error);
@@ -126,13 +140,14 @@ export class GeoapifyService {
    * Cost: 1 credit per request
    */
   async getRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }, profile: "driving" | "walking" | "cycling" = "driving"): Promise<RouteResult | null> {
-    if (!this.apiKey) {
+    const key = this.activeApiKey;
+    if (!key) {
       console.warn("Geoapify API key not configured");
       return null;
     }
 
     try {
-      const url = `${this.baseUrl}/routing?waypoints=${from.lng},${from.lat}|${to.lng},${to.lat}&mode=${profile}&apiKey=${this.apiKey}`;
+      const url = `${this.baseUrl}/routing?waypoints=${from.lng},${from.lat}|${to.lng},${to.lat}&mode=${profile}&apiKey=${key}`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -165,7 +180,8 @@ export class GeoapifyService {
    * Cost: Varies, but covered in free tier
    */
   async checkIsodistance(center: { lat: number; lng: number }, radiusKm: number, point: { lat: number; lng: number }): Promise<boolean> {
-    if (!this.apiKey) {
+    const key = this.activeApiKey;
+    if (!key) {
       console.warn("Geoapify API key not configured, using fallback distance calculation");
       // Fallback to simple distance calculation
       const distance = this.calculateHaversineDistance(center, point);
@@ -174,7 +190,7 @@ export class GeoapifyService {
 
     try {
       // Get isodistance polygon
-      const url = `${this.baseUrl}/isoline?lat=${center.lat}&lon=${center.lng}&type=distance&range=${radiusKm * 1000}&apiKey=${this.apiKey}`;
+      const url = `${this.baseUrl}/isoline?lat=${center.lat}&lon=${center.lng}&type=distance&range=${radiusKm * 1000}&apiKey=${key}`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -239,13 +255,14 @@ export class GeoapifyService {
    * Autocomplete: Get address suggestions as user types
    */
   async autocomplete(query: string, limit: number = 5): Promise<GeocodeResult[]> {
-    if (!this.apiKey) {
+    const key = this.activeApiKey;
+    if (!key) {
       console.warn("Geoapify API key not configured");
       return [];
     }
 
     try {
-      const url = `${this.baseUrl}/geocode/autocomplete?text=${encodeURIComponent(query)}&apiKey=${this.apiKey}&limit=${limit}`;
+      const url = `${this.baseUrl}/geocode/autocomplete?text=${encodeURIComponent(query)}&apiKey=${key}&limit=${limit}`;
       const response = await fetch(url);
 
       if (!response.ok) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   MapPin,
   Search,
@@ -17,6 +17,8 @@ import { useApp } from "../../contexts/AppContext";
 import LocationSelector from "../Location/LocationSelector";
 import VoiceOrderModal from "../Voice/VoiceOrderModal";
 import { apiService } from "../../services/api";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { setFilters } from "../../store/slices/restaurantsSlice";
 
 // Custom VOCABITE Logo Component
 const VOCABITELogo: React.FC = () => {
@@ -72,8 +74,18 @@ const VOCABITELogo: React.FC = () => {
 };
 
 const Header: React.FC = () => {
-  const { state, dispatch } = useApp();
+  const { state, dispatch: contextDispatch } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
+  const reduxDispatch = useAppDispatch();
+  const searchFilter = useAppSelector((state) => state.restaurants.filters.search);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    reduxDispatch(setFilters({ search: e.target.value }));
+    if (location.pathname !== '/restaurants' && e.target.value.trim() !== '') {
+       navigate('/restaurants');
+    }
+  };
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
@@ -110,7 +122,7 @@ const Header: React.FC = () => {
     apiService.clearTokens();
 
     // Clear user state
-    dispatch({ type: "LOGOUT" });
+    contextDispatch({ type: "LOGOUT" });
 
     // Close user menu
     setIsUserMenuOpen(false);
@@ -170,6 +182,8 @@ const Header: React.FC = () => {
                     <input
                       type="text"
                       placeholder="Search Pakistani restaurants, dishes..."
+                      value={searchFilter}
+                      onChange={handleSearchChange}
                       className="w-full pl-12 pr-14 py-3 bg-gray-50 border-transparent focus:bg-white border-2 focus:border-primary-500/50 rounded-2xl focus:ring-4 focus:ring-primary-500/10 transition-all duration-300 text-gray-900 placeholder-gray-500 shadow-sm"
                     />
                     <button
