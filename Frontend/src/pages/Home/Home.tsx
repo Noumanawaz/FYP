@@ -1,20 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { MapPin, Clock, Star, ChevronRight, ChevronDown } from "lucide-react";
+import { MapPin, Clock, Star, ChevronRight, ChevronDown, ShoppingCart, Mic, Navigation, ArrowRight, PlayCircle } from "lucide-react";
 import { mockRestaurants } from "../../data/mockData";
-import { ShoppingCart } from "lucide-react";
 import VoiceOrderModal from "../../components/Voice/VoiceOrderModal";
 import { useApp } from "../../contexts/AppContext";
 import BlurText from "../../components/Common/BlurText";
+import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 
-// ⬇️ Map imports
-// ⬇️ add Circle import
+// Map imports
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from "react-leaflet";
 import L from "leaflet";
-// Fix marker icon paths (Vite/CRA bundlers need explicit imports)
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
+
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -35,6 +34,11 @@ const Home: React.FC = () => {
   const { state } = useApp();
   const navigate = useNavigate();
 
+  // Scroll animations
+  const { scrollYProgress } = useScroll();
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.2], [1, 0.95]);
+
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (state.isAuthenticated && state.user) {
@@ -42,18 +46,16 @@ const Home: React.FC = () => {
     }
   }, [state.isAuthenticated, state.user, navigate]);
 
-  // ⬇️ State for the location modal + geolocation
+  // State
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [loadingLoc, setLoadingLoc] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
-
-  // ⬇️ State for voice order modal
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [hoveredRestaurant, setHoveredRestaurant] = useState<string | null>(null);
 
   const handleVoiceOrder = (orderData: any) => {
     console.log("Voice order received:", orderData);
-    // Handle voice order logic here
     setIsVoiceModalOpen(false);
   };
 
@@ -81,451 +83,557 @@ const Home: React.FC = () => {
     );
   };
 
+  // Animation Variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1, 
+      transition: { staggerChildren: 0.1, delayChildren: 0.2 } 
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, y: 0, 
+      transition: { type: "spring", stiffness: 100, damping: 12 } 
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white">
-      <section className="w-full bg-gradient-to-br from-slate-900 via-gray-900 to-black h-[85vh] flex items-center relative overflow-hidden">
-        {/* Background Image with Low Opacity */}
-        <div className="absolute inset-0 opacity-20">
-          <img
-            src="/hamburger-494706.jpg"
-            alt="Background"
-            className="w-full h-full object-cover"
+    <div className="min-h-screen bg-[#050505] selection:bg-cyan-500/30 text-white overflow-hidden">
+      
+      {/* 🚀 STUNNING HERO SECTION */}
+      <motion.section 
+        className="relative w-full min-h-[90vh] flex items-center justify-center pt-24 pb-16 overflow-hidden"
+        style={{ opacity: heroOpacity, scale: heroScale }}
+      >
+        {/* Dynamic Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {/* Subtle image overlay */}
+          <div className="absolute inset-0 bg-[url('/hamburger-494706.jpg')] bg-cover bg-center opacity-10 mix-blend-overlay"></div>
+          
+          {/* Glowing Orbs */}
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.2, 1],
+              x: [0, 50, 0],
+              y: [0, -50, 0]
+            }}
+            transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+            className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-cyan-600/20 blur-[120px]"
           />
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.5, 1],
+              x: [0, -100, 0],
+              y: [0, 50, 0]
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-indigo-600/20 blur-[120px]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#050505]/80 to-[#050505]"></div>
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-16 w-full">
-          {/* Main Layout - Left: BlurText Animation, Right: Action Card */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Side: BlurText Animation */}
-            <div className="flex flex-col justify-center items-center text-center">
-              <BlurText
-                text="Isn't this so cool?!"
-                delay={200}
-                animateBy="words"
-                direction="top"
-                onAnimationComplete={() => console.log('Animation completed!')}
-                className="text-[5rem] md:text-[6rem] leading-tight font-bold text-white mb-8 tracking-wider justify-center w-full"
-                style={{ fontFamily: "Comic Sans MS, cursive" }}
-              />
-            </div>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col lg:flex-row items-center justify-between gap-12">
+          
+          {/* Left Content */}
+          <motion.div 
+            initial="hidden"
+            animate="visible"
+            variants={containerVariants}
+            className="flex-1 w-full text-center lg:text-left z-20"
+          >
+            <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 backdrop-blur-md mb-6">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
+              </span>
+              <span className="text-cyan-300 text-sm font-semibold tracking-wide">Next-Gen Voice Ordering</span>
+            </motion.div>
+            
+            <motion.h1 variants={itemVariants} className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight">
+              Order <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">Faster</span> <br className="hidden md:block" />
+              With Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">Voice.</span>
+            </motion.h1>
+            
+            <motion.p variants={itemVariants} className="text-lg md:text-xl text-gray-400 mb-8 max-w-2xl mx-auto lg:mx-0 font-light leading-relaxed">
+              Experience the magic of AI ordering. Craving authentic Pakistani flavors? Just say the word, and we'll deliver it straight to your door.
+            </motion.p>
+            
+            <motion.div variants={itemVariants} className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              <button 
+                onClick={() => {
+                  if (!state.isAuthenticated) {
+                    navigate('/voice-prompt');
+                  } else {
+                    setIsVoiceModalOpen(true);
+                  }
+                }}
+                className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-cyan-500 text-gray-900 font-bold rounded-2xl overflow-hidden transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(6,182,212,0.4)]"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <Mic className="w-5 h-5 relative z-10 group-hover:animate-bounce" />
+                <span className="relative z-10">Start Voice Order</span>
+              </button>
+              
+              <Link 
+                to="/restaurants"
+                className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all hover:border-white/20 backdrop-blur-md"
+              >
+                Browse Menu <ArrowRight className="w-5 h-5" />
+              </Link>
+            </motion.div>
+          </motion.div>
 
-            {/* Right Side: Action Card */}
-            <div className="flex justify-center lg:justify-end">
-              <div className="w-full max-w-lg">
-                <div className="bg-white/10 backdrop-blur-lg rounded-3xl border border-white/20 p-6 shadow-2xl">
-                  {/* Address Input Section */}
-                  <div className="mb-6">
-                    <h3 className="text-xl font-semibold text-white mb-4">Where should we deliver?</h3>
-                    <div className="relative mb-4">
-                      <input type="text" placeholder="Enter your address for Pakistani cuisine delivery" className="w-full px-5 py-3 pr-12 bg-white/20 border border-white/30 rounded-2xl focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 text-white placeholder-gray-300 backdrop-blur-sm text-sm" />
-                      <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-cyan-400 hover:text-cyan-300 transition-colors" onClick={handleLocate}>
-                        <MapPin className="w-5 h-5" />
+          {/* Right Interactive Card */}
+          <motion.div 
+            initial={{ opacity: 0, x: 50, rotateY: -10 }}
+            animate={{ opacity: 1, x: 0, rotateY: 0 }}
+            transition={{ duration: 1, delay: 0.2, type: "spring" }}
+            className="flex-1 w-full max-w-md perspective-1000"
+          >
+            <div className="relative rounded-[2rem] bg-gray-900/40 p-1 backdrop-blur-3xl border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] transform-gpu hover:-translate-y-2 transition-transform duration-500">
+              {/* Glass container inner */}
+              <div className="bg-gradient-to-b from-gray-800/80 to-gray-950/80 rounded-[1.9rem] p-6 lg:p-8 outline outline-1 outline-white/5">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-xl font-bold text-white">Quick Delivery</h3>
+                  <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                    <Navigation className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="relative group">
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block ml-1">Location</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="Set your delivery location" 
+                        className="w-full px-5 py-4 pl-12 bg-black/40 border border-gray-700/50 rounded-2xl focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent text-white placeholder-gray-500 transition-all outline-none shadow-inner" 
+                        readOnly 
+                        value={coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : ""}
+                      />
+                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-hover:text-cyan-400 transition-colors" />
+                      <button 
+                        onClick={handleLocate}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 text-xs font-bold uppercase rounded-lg transition-colors"
+                      >
+                        Locate Me
                       </button>
                     </div>
+                  </div>
 
-                    {/* Quick Search Options */}
-                    <div>
-                      <h4 className="text-xs font-medium text-gray-300 mb-2">Popular Areas</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {["Karachi", "Lahore", "Islamabad", "Rawalpindi"].map((city) => (
-                          <button key={city} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded-full border border-white/20 transition-colors">
-                            {city}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 block ml-1">Popular Cities</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["Karachi", "Lahore", "Islamabad", "Rawalpindi"].map((city, idx) => (
+                        <motion.button 
+                          key={city}
+                          whileHover={{ scale: 1.05, backgroundColor: "rgba(255,255,255,0.1)" }}
+                          whileTap={{ scale: 0.95 }}
+                          className="px-4 py-2 bg-white/5 border border-white/5 text-gray-300 text-sm rounded-xl transition-colors hover:text-white backdrop-blur-sm"
+                        >
+                          {city}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+        </div>
+      </motion.section>
+
+      {/* 🌟 STATS / LOGOS SECTION */}
+      <section className="py-10 border-y border-white/5 bg-white/[0.02]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap justify-center md:justify-between items-center gap-8 opacity-60">
+            {["100+ Partner Restaurants", "Fastest Delivery", "AI Powered", "Authentic Recipes", "24/7 Support"].map((text) => (
+              <div key={text} className="flex items-center gap-2 text-sm font-semibold tracking-wider text-gray-300 uppercase">
+                <Star className="w-4 h-4 text-cyan-400" /> {text}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 🚀 FEATURED RESTAURANTS SECTION */}
+      <section className="py-24 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
+            <div className="max-w-2xl">
+              <motion.h2 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-3xl md:text-5xl font-bold mb-4"
+              >
+                Trending Spots
+              </motion.h2>
+              <motion.p 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 }}
+                className="text-gray-400 text-lg"
+              >
+                Discover our top-rated partners serving the best authentic Pakistani cuisine near you.
+              </motion.p>
+            </div>
+            
+            <Link to="/restaurants" className="group flex items-center gap-2 text-cyan-400 font-semibold hover:text-cyan-300 transition-colors">
+              View all restaurants
+              <span className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {mockRestaurants.slice(0, 6).map((restaurant, idx) => (
+              <motion.div
+                key={restaurant.id}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.1, duration: 0.5 }}
+                onHoverStart={() => setHoveredRestaurant(restaurant.id)}
+                onHoverEnd={() => setHoveredRestaurant(null)}
+              >
+                <Link to={`/restaurant/${restaurant.id}`} className="block relative group rounded-3xl overflow-hidden bg-gray-900/50 border border-white/5 hover:border-cyan-500/30 transition-all duration-300">
+                  
+                  {/* Image Container with creative hover */}
+                  <div className="relative h-56 overflow-hidden">
+                    <motion.img 
+                      src={restaurant.image} 
+                      alt={restaurant.name} 
+                      className="w-full h-full object-cover"
+                      animate={{ scale: hoveredRestaurant === restaurant.id ? 1.05 : 1 }}
+                      transition={{ duration: 0.4 }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent opacity-80"></div>
+                    
+                    {restaurant.promo && (
+                      <div className="absolute top-4 left-4">
+                        <span className="px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-lg">
+                          {restaurant.promo.title}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="absolute top-4 right-4 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-lg flex items-center gap-1 border border-white/10">
+                      <Star className="w-3.5 h-3.5 text-yellow-500 fill-current" />
+                      <span className="text-white text-sm font-bold">{restaurant.rating}</span>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-6 relative">
+                    {/* Animated "Voice Order" button overlay */}
+                    <AnimatePresence>
+                      {hoveredRestaurant === restaurant.id && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute -top-7 right-6 z-20"
+                        >
+                          <button 
+                            className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 p-3 rounded-full shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-colors"
+                            onClick={(e) => { 
+                              e.preventDefault(); 
+                              if (!state.isAuthenticated) {
+                                navigate('/voice-prompt');
+                              } else {
+                                setIsVoiceModalOpen(true); 
+                              }
+                            }}
+                          >
+                            <Mic className="w-5 h-5" />
                           </button>
-                        ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <h3 className="text-xl font-bold text-white mb-2">{restaurant.name}</h3>
+                    <p className="text-gray-400 text-sm mb-4 line-clamp-2">{restaurant.description}</p>
+                    
+                    <div className="flex items-center justify-between text-sm text-gray-400 border-t border-white/10 pt-4 mt-2">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-gray-500" />
+                        <span>{restaurant.deliveryTime}</span>
                       </div>
+                      <div className="flex items-center gap-1.5">
+                        <ShoppingCart className="w-4 h-4 text-gray-500" />
+                        <span>₨{restaurant.deliveryFee ?? 0}</span>
+                      </div>
+                      <span className="font-semibold text-cyan-400 group-hover:text-cyan-300">Order →</span>
                     </div>
                   </div>
 
-                  {/* Voice Order Section */}
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold text-white mb-1.5">Ready to order?</h3>
-                    <p className="text-gray-300 mb-4 text-sm">Try our revolutionary voice ordering</p>
-
-                    <button className="group bg-gray-800 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl w-full border border-gray-600 hover:border-gray-500" onClick={() => setIsVoiceModalOpen(true)}>
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="w-5 h-5 bg-gray-600 rounded-full flex items-center justify-center group-hover:bg-gray-500 transition-colors">
-                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <span className="text-base">Start Voice Order</span>
-                      </div>
-                    </button>
-
-                    <p className="text-center text-xs text-gray-400 mt-3">
-                      or{" "}
-                      <Link to="/restaurants" className="text-cyan-400 cursor-pointer hover:underline">
-                        browse restaurants manually
-                      </Link>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Features Grid - Below the main layout */}
-          <div className="mt-16 mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  </svg>
-                </div>
-                <h3 className="font-bold text-white mb-2 text-lg">Voice Commands</h3>
-              </div>
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-10 h-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </div>
-                <h3 className="font-bold text-white mb-2 text-lg">Pakistani Cuisine</h3>
-              </div>
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-10 h-10 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h3 className="font-bold text-white mb-2 text-lg">AI-Powered</h3>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Restaurants Section */}
-      <section className="py-20 bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Enhanced Header */}
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium mb-4">
-              <div className="w-2 h-2 bg-primary-500 rounded-full mr-2 animate-pulse"></div>
-              Featured Restaurants
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Featured Pakistani Restaurants</h2>
-            <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">Discover authentic flavors from top Pakistani restaurants with our curated selection of the finest dining experiences</p>
-
-            {/* Feature badges */}
-            <div className="flex flex-wrap justify-center items-center gap-6 text-sm">
-              <div className="flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
-                <div className="w-2 h-2 bg-primary-500 rounded-full mr-3"></div>
-                <span className="font-medium text-gray-700">Voice Ordering Available</span>
-              </div>
-              <div className="flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                <span className="font-medium text-gray-700">Authentic Pakistani Cuisine</span>
-              </div>
-              <div className="flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                <span className="font-medium text-gray-700">Fast Delivery</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Enhanced Carousel Container */}
-          <div className="relative">
-            {/* Navigation Controls */}
-            <div className="absolute -top-16 right-0 hidden sm:flex space-x-3 z-10">
-              <button
-                onClick={() => {
-                  const carousel = document.getElementById("restaurants-carousel");
-                  if (carousel) carousel.scrollBy({ left: -350, behavior: "smooth" });
-                }}
-                className="w-12 h-12 flex items-center justify-center rounded-full bg-white shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-200 border border-gray-200"
-              >
-                <ChevronRight className="w-6 h-6 rotate-180 text-gray-700" />
-              </button>
-              <button
-                onClick={() => {
-                  const carousel = document.getElementById("restaurants-carousel");
-                  if (carousel) carousel.scrollBy({ left: 350, behavior: "smooth" });
-                }}
-                className="w-12 h-12 flex items-center justify-center rounded-full bg-white shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all duration-200 border border-gray-200"
-              >
-                <ChevronRight className="w-6 h-6 text-gray-700" />
-              </button>
-            </div>
-
-            {/* Restaurant Cards */}
-            <div id="restaurants-carousel" className="flex overflow-x-auto scrollbar-hide space-x-6 sm:space-x-8 scroll-smooth" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-              {mockRestaurants.slice(0, 6).map((restaurant) => (
-                <Link key={restaurant.id} to={`/restaurant/${restaurant.id}`} className="group w-[260px] sm:w-[320px] flex-shrink-0">
-                  <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 h-full border border-gray-100 hover:border-primary-200">
-                    {/* Image Container */}
-                    <div className="relative overflow-hidden">
-                      <img src={restaurant.image} alt={restaurant.name} className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500" />
-                      {/* Gradient overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                      {/* Promo badge */}
-                      {restaurant.promo && <div className="absolute top-4 left-4 bg-gradient-to-r from-primary-500 to-primary-600 text-white px-3 py-1.5 rounded-full text-sm font-semibold shadow-lg">{restaurant.promo.title}</div>}
-
-                      {/* Voice ordering badge */}
-                      <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm text-primary-600 px-2 py-1 rounded-full text-xs font-medium shadow-sm">
-                        <div className="flex items-center">
-                          <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mr-1.5 animate-pulse"></div>
-                          Voice Order
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-6">
-                      {/* Header */}
-                      <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-xl font-bold text-gray-900 group-hover:text-primary-600 transition-colors duration-200 truncate pr-2">{restaurant.name}</h3>
-                        <div className="flex items-center bg-yellow-50 px-2 py-1 rounded-lg">
-                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                          <span className="text-sm font-semibold text-gray-800 ml-1">{restaurant.rating}</span>
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      <p className="text-gray-600 text-sm mb-4 line-clamp-2 leading-relaxed">{restaurant.description}</p>
-
-                      {/* Stats */}
-                      <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                        <div className="flex items-center">
-                          <span className="font-medium text-gray-700">({restaurant.reviewCount})+ orders</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Clock className="w-4 h-4 mr-1 text-primary-500" />
-                          <span className="font-medium">{restaurant.deliveryTime}</span>
-                        </div>
-                      </div>
-
-                      {/* Delivery info */}
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                        <div className="flex items-center text-gray-600">
-                          <ShoppingCart className="w-4 h-4 mr-2 text-primary-500" />
-                          <span className="text-sm font-medium">₨{restaurant.deliveryFee ?? 0} Delivery</span>
-                        </div>
-                        <div className="text-primary-600 text-sm font-semibold group-hover:text-primary-700 transition-colors">Order Now →</div>
-                      </div>
-                    </div>
-                  </div>
                 </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* View All Button */}
-          <div className="text-center mt-12">
-            <Link to="/restaurants" className="inline-flex items-center px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl">
-              View All Restaurants
-              <ChevronRight className="w-5 h-5 ml-2" />
-            </Link>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Partner With Us Section */}
-      <section className="relative py-16">
-        {/* Full-width image */}
-        <div className="w-full h-[420px] relative">
-          <img src="/home-vendor-pk.webp" alt="Partner with us" className="w-full h-full object-cover" />
+      {/* 🎧 HOW IT WORKS (Modernized) */}
+      <section className="py-24 bg-gray-950 relative border-y border-white/5">
+        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center mb-16 max-w-3xl mx-auto">
+            <h2 className="text-3xl md:text-5xl font-bold mb-6">Order At The Speed Of Sound</h2>
+            <p className="text-gray-400 text-lg">Vocabite's industry-first conversational AI understands exactly what you want.</p>
+          </div>
 
-          {/* White Card overlapping bottom left */}
-          <div className="absolute -bottom-20 left-1/2 transform -translate-x-1/2 md:left-16 md:translate-x-0 bg-white rounded-xl shadow-lg p-8 max-w-xl w-[90%]">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Partner with Vocabite</h2>
-            <p className="text-gray-700 mb-4">Join Pakistan's premier voice-ordering platform and reach customers through innovative AI-powered ordering.</p>
-            <p className="text-gray-700 mb-4">We help Pakistani restaurants showcase their authentic cuisine, process voice orders, and deliver exceptional experiences to food lovers across the country.</p>
-            <p className="text-gray-700 mb-6">Ready to revolutionize your restaurant's ordering experience?</p>
-            <Link to="/partner">
-              <button className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 font-medium transition-colors">Partner with Us</button>
-            </Link>
+          <div className="grid md:grid-cols-3 gap-8 relative">
+            {/* Connecting line for desktop */}
+            <div className="hidden md:block absolute top-[40%] left-[15%] right-[15%] h-[2px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent -z-10"></div>
+
+            {[
+              { icon: Mic, title: "1. Tap & Speak", desc: "Just say 'I want Chicken Karahi from Desi Bites'." },
+              { icon: PlayCircle, title: "2. AI Processes", desc: "Our engine instantly parses your request and builds your cart." },
+              { icon: Navigation, title: "3. Fast Delivery", desc: "Checkout in one click and track your piping hot food." }
+            ].map((step, idx) => (
+              <motion.div 
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.2 }}
+                className="flex flex-col items-center text-center group"
+              >
+                <div className="w-24 h-24 rounded-[2rem] bg-gray-900 border border-white/10 shadow-2xl flex items-center justify-center mb-6 group-hover:-translate-y-2 transition-transform duration-300 group-hover:border-cyan-500/50">
+                  <step.icon className="w-10 h-10 text-cyan-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">{step.title}</h3>
+                <p className="text-gray-400">{step.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Cities Section removed by request */}
+      {/* 💼 BUSINESS & PARTNERS COMPACT SECTION */}
+      <section className="py-24 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid md:grid-cols-2 gap-8">
+            
+            {/* Partner Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative rounded-[2rem] overflow-hidden group min-h-[400px]"
+            >
+              <img src="/home-vendor-pk.webp" alt="Partner" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent"></div>
+              
+              <div className="absolute bottom-0 left-0 p-8 md:p-12">
+                <div className="inline-block px-4 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-white uppercase tracking-wider mb-4 border border-white/20">For Restaurants</div>
+                <h3 className="text-3xl font-bold text-white mb-4">Partner with Vocabite</h3>
+                <p className="text-gray-300 mb-8 max-w-sm">Reach more customers with our AI-powered voice ordering platform.</p>
+                <Link to="/partner" className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-gray-900 px-6 py-3 rounded-xl font-bold transition-colors">
+                  Join Now <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </motion.div>
 
-      {/* Take your office out to lunch */}
-      <section className="relative py-16">
-        {/* Heading */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Vocabite for Business</h2>
-        </div>
+            {/* Corporate Card */}
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative rounded-[2rem] overflow-hidden group min-h-[400px]"
+            >
+              <img src="/home-corporate-pk.webp" alt="Corporate" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent"></div>
+              
+              <div className="absolute bottom-0 left-0 p-8 md:p-12">
+                <div className="inline-block px-4 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-white uppercase tracking-wider mb-4 border border-white/20">For Business</div>
+                <h3 className="text-3xl font-bold text-white mb-4">Corporate Catering</h3>
+                <p className="text-gray-300 mb-8 max-w-sm">Simplify office lunches and team events with massive group orders.</p>
+                <Link to="/partner" className="inline-flex items-center gap-2 bg-white hover:bg-gray-200 text-gray-900 px-6 py-3 rounded-xl font-bold transition-colors">
+                  Get Started <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </motion.div>
 
-        {/* Full-width image */}
-        <div className="w-full h-[420px] relative">
-          <img src="/home-corporate-pk.webp" alt="Partner with us" className="w-full h-full object-cover" />
-
-          {/* White Card overlapping bottom */}
-          <div className="absolute -bottom-20 left-1/2 transform -translate-x-1/2 md:left-16 md:translate-x-0 bg-white rounded-xl shadow-lg p-8 max-w-xl w-[90%]">
-            <h4 className="text-3xl md:text-3xl font-bold text-gray-700">Vocabite for Business</h4>
-            <p className="text-gray-700 mb-6">Streamline corporate catering with voice ordering. Perfect for office lunches, corporate events, client meetings, and team gatherings with authentic Pakistani cuisine.</p>
-            <Link to="/partner">
-              <button className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 font-medium transition-colors">Get Started</button>
-            </Link>
           </div>
         </div>
       </section>
 
-      {/* Vocabite Info & FAQ Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Heading */}
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6 text-left">Order authentic Pakistani cuisine with voice commands on Vocabite</h2>
-
-          {/* Paragraphs */}
-          <p className="text-gray-700 mb-4 text-left">Craving authentic Pakistani flavors? Looking for a convenient way to order your favorite biryani, karahi, or kebabs? Vocabite is Pakistan's first voice-ordering platform that brings you the best Pakistani restaurants and authentic cuisine through innovative AI-powered voice commands. Simply speak your order and enjoy a seamless dining experience.</p>
-
-          <h3 className="text-2xl font-semibold text-gray-900 mt-8 mb-4 text-left">What makes Vocabite special?</h3>
-          <ul className="list-disc list-inside text-gray-700 mb-6 space-y-1 text-left">
-            <li>Revolutionary voice ordering technology powered by AI</li>
-            <li>Curated selection of authentic Pakistani restaurants and cuisine</li>
-            <li>Intelligent voice recognition that understands context and preferences</li>
-            <li>Seamless integration with traditional ordering methods</li>
-            <li>Fast and reliable delivery across major Pakistani cities</li>
-          </ul>
-
-          <h3 className="text-2xl font-semibold text-gray-900 mt-8 mb-4 text-left">Frequently Asked Questions</h3>
-
-          {/* Stylish FAQ Accordion */}
+      {/* ❓ FAQ ACCORDION */}
+      <section className="py-24 bg-gray-950 border-t border-white/5">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Got Questions?</h2>
+            <p className="text-gray-400 text-lg">Everything you need to know about Vocabite's magical experience.</p>
+          </div>
           <FAQAccordion />
         </div>
       </section>
 
-      {/* ⬇️ LOCATION MAP MODAL */}
+      {/* MODALS */}
       {isMapOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white w-[95%] max-w-3xl rounded-2xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Your current location</h3>
-              <button onClick={() => setIsMapOpen(false)} className="w-9 h-9 grid place-items-center rounded-full hover:bg-gray-100" aria-label="Close">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="bg-gray-900 w-full max-w-4xl rounded-[2rem] shadow-2xl overflow-hidden border border-white/10"
+          >
+            <div className="flex items-center justify-between p-6 border-b border-white/5 bg-gray-900/50">
+              <h3 className="text-xl font-bold text-white">Select Location</h3>
+              <button 
+                onClick={() => setIsMapOpen(false)} 
+                className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+              >
                 ✕
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
-              {loadingLoc && <div className="text-sm text-gray-600">Finding your location…</div>}
-              {locError && <div className="text-sm text-red-600">{locError}</div>}
+            <div className="p-6">
+              {loadingLoc && (
+                <div className="flex justify-center items-center h-[400px]">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+                </div>
+              )}
+              {locError && <div className="text-sm text-red-500 bg-red-500/10 p-4 rounded-xl mb-4 border border-red-500/20">{locError}</div>}
 
-              <div className="h-[420px] rounded-xl overflow-hidden border">
-                <MapContainer
-                  center={coords ? [coords.lat, coords.lng] : [24.8607, 67.0011]} // Karachi fallback
-                  zoom={coords ? 13 : 13}
-                  className="h-full w-full relative"
+              {!loadingLoc && (
+                <div className="relative h-[400px] md:h-[500px] rounded-2xl overflow-hidden border border-white/10 shadow-inner">
+                  <MapContainer
+                    center={coords ? [coords.lat, coords.lng] : [24.8607, 67.0011]}
+                    zoom={13}
+                    className="h-full w-full z-0"
+                  >
+                    <TileLayer 
+                      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                    />
+
+                    {coords && (
+                      <>
+                        <Marker position={[coords.lat, coords.lng]}>
+                          <Popup className="custom-popup">You are here</Popup>
+                        </Marker>
+                        <Circle
+                          center={[coords.lat, coords.lng]}
+                          radius={10000}
+                          pathOptions={{ color: "#06b6d4", fillColor: "#06b6d4", fillOpacity: 0.1, weight: 1 }}
+                        />
+                        <Recenter lat={coords.lat} lng={coords.lng} />
+                      </>
+                    )}
+
+                    <div className="absolute bottom-6 right-6 z-[1000]">
+                      <button 
+                        onClick={handleLocate} 
+                        className="p-4 rounded-xl shadow-2xl bg-gray-900 border border-white/10 hover:border-cyan-500/50 text-white transition-all group"
+                      >
+                        <Navigation className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300" />
+                      </button>
+                    </div>
+                  </MapContainer>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-4 mt-6">
+                <button 
+                  onClick={() => setIsMapOpen(false)} 
+                  className="px-6 py-3 rounded-xl border border-white/10 hover:bg-white/5 font-semibold transition-colors"
                 >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
-
-                  {coords && (
-                    <>
-                      <Marker position={[coords.lat, coords.lng]}>
-                        <Popup>You are here</Popup>
-                      </Marker>
-
-                      {/* Circle with 15km radius */}
-                      <Circle
-                        center={[coords.lat, coords.lng]}
-                        radius={15000} // 15 km
-                        pathOptions={{ color: "blue", fillColor: "skyblue", fillOpacity: 0.2 }}
-                      />
-
-                      <Recenter lat={coords.lat} lng={coords.lng} />
-                    </>
-                  )}
-
-                  {/* Always visible button in bottom-right */}
-                  <div className="absolute bottom-4 right-4 z-[1000]">
-                    <button onClick={handleLocate} className="p-3 rounded-full shadow bg-white hover:bg-gray-100 border border-gray-300" aria-label="Locate">
-                      <MapPin className="w-5 h-5 text-gray-700" />
-                    </button>
-                  </div>
-                </MapContainer>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setIsMapOpen(false)} className="px-4 py-2 rounded-lg border hover:bg-gray-50">
-                  Close
+                  Cancel
                 </button>
-                {/* Optional: wire this to use coords in your address input later */}
-                <button onClick={() => setIsMapOpen(false)} className="px-4 py-2 rounded-lg bg-pink-600 text-white hover:bg-pink-700">
-                  Use this location
+                <button 
+                  onClick={() => setIsMapOpen(false)} 
+                  className="px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all"
+                >
+                  Confirm Location
                 </button>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
-      {/* Voice Order Modal */}
       <VoiceOrderModal isOpen={isVoiceModalOpen} onClose={() => setIsVoiceModalOpen(false)} onOrderSubmit={handleVoiceOrder} />
     </div>
   );
 };
 
-export default Home;
-
-// Lightweight accordion for FAQ
+// FAQ Accordion Component using Framer Motion
 const FAQAccordion: React.FC = () => {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
-  const faqs: { q: string; a: string }[] = [
+
+  const faqs = [
     {
-      q: "How does voice ordering work on Vocabite?",
-      a: 'Simply click the voice order button or say "Hey Vocabite" to start. Our AI will understand your order, ask clarifying questions if needed, and process your request. You can also browse restaurants traditionally and use voice commands for specific items.',
+      q: "How does voice ordering work?",
+      a: "Just speak naturally! Click the mic and say 'I'd like 2 Chicken Karahis'. Our AI understands accents, complex orders, and customizations perfectly."
     },
     {
-      q: "What Pakistani cuisines are available on Vocabite?",
-      a: "Vocabite features authentic Pakistani restaurants offering biryani, karahi, kebabs, naan, traditional sweets, lassi, and much more. We curate the best Pakistani restaurants in your area to ensure authentic flavors and quality.",
+      q: "Do you deliver late at night?",
+      a: "Yes! Vocabite is available 24/7 in major Pakistani cities, partnering with night-shift restaurants to satisfy those late-night cravings."
     },
     {
-      q: "Does Vocabite deliver 24 hours?",
-      a: "Yes, Vocabite offers 24-hour delivery in major Pakistani cities. However, restaurant availability may vary during late hours. You can check which restaurants are open by using our voice assistant or browsing the app.",
+      q: "Can I pay with cash?",
+      a: "Absolutely. We support Cash on Delivery (COD) across Pakistan alongside secure digital payment methods."
     },
     {
-      q: "Can I pay cash for Vocabite orders?",
-      a: "Yes, Vocabite supports cash on delivery for all orders in Pakistan. We also accept credit/debit cards and digital wallets for online payments.",
-    },
-    {
-      q: "How accurate is the voice recognition?",
-      a: "Our AI-powered voice recognition is highly accurate and trained specifically for Pakistani cuisine terminology. It understands various accents and can process complex orders with multiple items and customizations.",
-    },
-    {
-      q: "Can I order for someone else using voice commands?",
-      a: 'Yes, you can specify delivery details and recipient information through voice commands. Just say "deliver to [address]" or "for [person\'s name]" and our AI will handle the rest.',
-    },
-    {
-      q: "What if the voice assistant doesn't understand my order?",
-      a: "Our AI will ask clarifying questions to ensure accuracy. You can also switch to traditional text-based ordering at any time. The system learns from interactions to improve recognition over time.",
-    },
-    {
-      q: "Which cities does Vocabite serve?",
-      a: "Vocabite currently serves major Pakistani cities including Karachi, Lahore, Islamabad, Rawalpindi, Faisalabad, and more. We're expanding to additional cities regularly.",
-    },
-    {
-      q: "Is there a minimum order amount?",
-      a: "Minimum order amounts vary by restaurant and are clearly displayed during the ordering process. Many restaurants offer free delivery above certain thresholds.",
-    },
-    {
-      q: "How does Vocabite ensure food quality?",
-      a: "We partner only with verified, high-quality Pakistani restaurants. Each partner undergoes strict quality checks and customer feedback monitoring to maintain our standards.",
-    },
+      q: "Which cities are currently supported?",
+      a: "We currently operate in Karachi, Lahore, Islamabad, and Rawalpindi, with rapid expansion planned for other major hubs."
+    }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+    <div className="space-y-4">
       {faqs.map((item, idx) => {
-        const open = openIdx === idx;
+        const isOpen = openIdx === idx;
         return (
-          <button key={idx} onClick={() => setOpenIdx(open ? null : idx)} className={`text-left bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow transition-shadow ${open ? "ring-2 ring-primary-100" : ""}`} aria-expanded={open}>
-            <div className="flex items-start justify-between">
-              <h4 className="text-gray-900 font-semibold pr-6 text-base sm:text-lg">{item.q}</h4>
-              <span className={`ml-3 flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-700 transition-transform ${open ? "rotate-180" : ""}`}>
-                <ChevronDown className="w-5 h-5" />
-              </span>
-            </div>
-            <div className={`mt-3 text-gray-600 text-sm sm:text-base leading-relaxed overflow-hidden transition-all duration-300 ${open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}>{item.a}</div>
-          </button>
+          <motion.div 
+            key={idx} 
+            initial={false}
+            animate={{ backgroundColor: isOpen ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)" }}
+            className={`border rounded-2xl overflow-hidden transition-colors ${isOpen ? 'border-cyan-500/30' : 'border-white/5 hover:border-white/10'}`}
+          >
+            <button 
+              onClick={() => setOpenIdx(isOpen ? null : idx)} 
+              className="w-full flex items-center justify-between p-6 text-left"
+            >
+              <h4 className="text-lg font-semibold text-white">{item.q}</h4>
+              <motion.div 
+                animate={{ rotate: isOpen ? 180 : 0 }} 
+                transition={{ duration: 0.3 }}
+                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0 ml-4"
+              >
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              </motion.div>
+            </button>
+            <AnimatePresence>
+              {isOpen && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                >
+                  <div className="px-6 pb-6 text-gray-400 leading-relaxed border-t border-white/5 pt-4">
+                    {item.a}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         );
       })}
-      <div className="md:col-span-2">
-        <div className="mt-4 text-gray-600 text-sm">Experience the future of food ordering with Vocabite — where authentic Pakistani cuisine meets cutting-edge voice technology!</div>
-      </div>
     </div>
   );
 };
+
+export default Home;

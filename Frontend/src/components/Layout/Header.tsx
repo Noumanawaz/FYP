@@ -1,17 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  MapPin,
-  Search,
-  ShoppingCart,
-  User,
-  Bell,
-  Menu,
-  X,
-  ChevronDown,
-  Mic,
-  LogOut,
-  Settings,
+  MapPin, Search, ShoppingCart, User, Bell, Menu, X, ChevronDown, Mic, LogOut, Settings, Navigation
 } from "lucide-react";
 import { useApp } from "../../contexts/AppContext";
 import LocationSelector from "../Location/LocationSelector";
@@ -19,56 +9,27 @@ import VoiceOrderModal from "../Voice/VoiceOrderModal";
 import { apiService } from "../../services/api";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { setFilters } from "../../store/slices/restaurantsSlice";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Custom VOCABITE Logo Component
 const VOCABITELogo: React.FC = () => {
   return (
     <div
-      className="flex items-center text-2xl sm:text-3xl font-extrabold tracking-tight text-blue-900"
-      style={{ fontFamily: "Inter, sans-serif" }}
+      className="flex items-center text-2xl sm:text-3xl font-extrabold tracking-tight group"
+      style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      {/* V */}
-      <span className="text-blue-900">V</span>
-
-      {/* Microphone Icon - using Lucide icon */}
+      <span className="text-white group-hover:text-cyan-400 transition-colors duration-300">V</span>
+      
+      {/* Microphone Icon */}
       <div className="mx-1 relative">
-        <Mic className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
-        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-primary-500"></span>
+        <Mic className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
+        <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
         </span>
       </div>
 
-      {/* C */}
-      <span className="text-blue-900 relative">
-        C{/* Bite marks */}
-        <div className="absolute -top-1 left-0 w-2 h-1 bg-white rounded-full"></div>
-        <div className="absolute -bottom-1 left-0 w-2 h-1 bg-white rounded-full"></div>
-      </span>
-
-      {/* A */}
-      <span className="text-blue-900 relative">
-        A{/* Bite mark */}
-        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-1 bg-white rounded-full"></div>
-      </span>
-
-      {/* B */}
-      <span className="text-blue-900 relative">
-        B{/* Bite mark */}
-        <div className="absolute -top-1 left-0 w-2 h-1 bg-white rounded-full"></div>
-      </span>
-
-      {/* I */}
-      <span className="text-blue-900">I</span>
-
-      {/* T */}
-      <span className="text-blue-900 relative">
-        T{/* Bite mark */}
-        <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-1 bg-white rounded-full"></div>
-      </span>
-
-      {/* E */}
-      <span className="text-blue-900">E</span>
+      <span className="text-white group-hover:text-cyan-400 transition-colors duration-300">CABITE</span>
     </div>
   );
 };
@@ -113,85 +74,83 @@ const Header: React.FC = () => {
 
   const handleVoiceOrder = (orderText: string) => {
     alert(
-      `🎤 Voice Order Processed Successfully!\n\n${orderText}\n\n✅ In a real app, this would be added to your cart and you could proceed to checkout.`,
+      `🎤 Voice Order Processed Successfully!\n\n${orderText}\n\n✅ In a real app, this would be added to your cart.`
     );
   };
 
   const handleLogout = () => {
-    // Clear all tokens from API service (this will also clear localStorage)
     apiService.clearTokens();
-
-    // Clear user state
     contextDispatch({ type: "LOGOUT" });
-
-    // Close user menu
     setIsUserMenuOpen(false);
   };
 
   const isAuthenticated = state.isAuthenticated && state.user;
 
+  // Header Animation Configuration
+  const headerClasses = `fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
+    scrolled
+      ? "bg-[#050505]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)] border-b border-white/5"
+      : "bg-[#050505] border-b border-transparent"
+  }`;
+
   return (
     <>
-      <header
-        className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? "bg-white/80 backdrop-blur-md shadow-lg border-b border-gray-200/50"
-            : "bg-white shadow-sm border-b border-gray-100"
-        }`}
-      >
+      <header className={headerClasses}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 lg:h-20">
+          <div className="flex items-center justify-between h-20 lg:h-24">
+            
             {/* Logo */}
-            <Link to="/" className="flex items-center group">
-              <div className="flex items-center transition-transform duration-300 group-hover:scale-105">
-                <VOCABITELogo />
-              </div>
-              <div className="ml-3 hidden sm:block">
-                <div className="text-xs font-medium text-primary-600 tracking-wider uppercase bg-primary-50 px-2 py-0.5 rounded-full">
-                  Voice Ordering
+            <Link to="/" className="flex items-center group relative z-10">
+              <VOCABITELogo />
+              <div className="ml-4 hidden sm:block">
+                <div className="text-[10px] font-bold text-cyan-400 tracking-widest uppercase bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.1)] group-hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-shadow">
+                  Voice First
                 </div>
               </div>
             </Link>
 
-            {/* Desktop Middle */}
+            {/* Middle Section - Search & Location */}
             {isAuthenticated && (
-              <div className="hidden lg:flex items-center flex-1 mx-8 space-x-6">
-                {/* Location */}
+              <div className="hidden lg:flex items-center flex-1 mx-12 space-x-6">
+                
+                {/* Modern Location Selector */}
                 <button
                   onClick={() => setIsLocationOpen(true)}
-                  className="flex items-center space-x-3 px-4 py-2.5 rounded-full hover:bg-gray-100/80 transition-all duration-300 border border-transparent hover:border-gray-200 group min-w-0 flex-shrink-0"
+                  className="flex items-center space-x-3 px-4 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all duration-300 group shadow-inner"
                 >
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center group-hover:bg-primary-100 transition-colors">
-                    <MapPin className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/10 text-cyan-400 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                    <Navigation className="w-4 h-4" />
                   </div>
                   <div className="text-left min-w-0">
-                    <div className="text-xs text-gray-500 font-medium">
-                      Deliver into
-                    </div>
-                    <div className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
-                      {state.selectedAddress?.label || "Select Location"}
+                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Deliver to</div>
+                    <div className="text-sm font-semibold text-white truncate max-w-[150px]">
+                      {state.selectedAddress?.label || "Set Location"}
                     </div>
                   </div>
-                  <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                  <ChevronDown className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 transition-colors" />
                 </button>
 
-                {/* Search Bar */}
-                <div className="relative flex-1 max-w-2xl group">
+                {/* Sleek Search Bar */}
+                <div className="relative flex-1 max-w-xl group">
                   <div className="relative">
-                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-primary-500 transition-colors" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5 group-hover:text-cyan-400 transition-colors" />
                     <input
                       type="text"
-                      placeholder="Search Pakistani restaurants, dishes..."
+                      placeholder="Search for Karahi, Biryani or restaurants..."
                       value={searchFilter}
                       onChange={handleSearchChange}
-                      className="w-full pl-12 pr-14 py-3 bg-gray-50 border-transparent focus:bg-white border-2 focus:border-primary-500/50 rounded-2xl focus:ring-4 focus:ring-primary-500/10 transition-all duration-300 text-gray-900 placeholder-gray-500 shadow-sm"
+                      className="w-full pl-12 pr-16 py-3.5 bg-[#111] border border-gray-800 focus:border-cyan-500/50 rounded-2xl focus:ring-4 focus:ring-cyan-500/10 transition-all text-white placeholder-gray-500 outline-none shadow-inner"
                     />
+                    
+                    {/* Floating Glow on focus */}
+                    <div className="absolute inset-0 -z-10 rounded-2xl bg-cyan-500/0 group-focus-within:bg-cyan-500/5 blur-xl transition-all duration-500 pointer-events-none"></div>
+
                     <button
                       onClick={() => setIsVoiceModalOpen(true)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-xl bg-primary-50 text-primary-600 hover:bg-primary-100 hover:scale-105 transition-all duration-300 shadow-sm"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-gray-900 shadow-[0_0_15px_rgba(6,182,212,0.3)] hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all duration-300"
                       title="Voice Order"
                     >
-                      <Mic className="w-5 h-5" />
+                      <Mic className="w-4 h-4 font-bold" />
                     </button>
                   </div>
                 </div>
@@ -199,225 +158,166 @@ const Header: React.FC = () => {
             )}
 
             {/* Right Actions */}
-            <div className="flex items-center space-x-2 sm:space-x-4">
+            <div className="flex items-center space-x-3 sm:space-x-5 relative z-10">
+              
               {/* Notifications */}
               {isAuthenticated && (
-                <button className="relative p-3 rounded-full hover:bg-gray-100 transition-all duration-200 group">
-                  <Bell className="w-5 h-5 text-gray-600 group-hover:text-primary-600 transition-colors" />
+                <button className="relative p-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors group">
+                  <Bell className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
                   {unreadNotifications > 0 && (
-                    <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
+                    <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border border-[#050505] shadow-[0_0_10px_rgba(239,68,68,1)]"></span>
                   )}
                 </button>
               )}
 
-              {/* User / Login */}
               {state.isAuthenticated ? (
-                // Logged-in state
-                <div className="relative flex items-center space-x-3">
+                <div className="flex items-center space-x-3 sm:space-x-4">
+                  
+                  {/* Cart */}
                   <Link
                     to="/cart"
-                    className="relative p-3 rounded-full hover:bg-gray-100 transition-all duration-200 group mr-1"
+                    className="relative p-2.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 transition-all group"
                   >
-                    <ShoppingCart className="w-5 h-5 text-gray-600 group-hover:text-primary-600 transition-colors" />
+                    <ShoppingCart className="w-5 h-5 text-cyan-400" />
                     {cartItemCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-600 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-sm animate-bounce">
+                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-cyan-500 text-gray-900 text-xs font-bold rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.5)]">
                         {cartItemCount}
                       </span>
                     )}
                   </Link>
 
+                  {/* User Profile Dropdown */}
                   <div className="relative">
                     <button
                       onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                      className="flex items-center space-x-3 p-1.5 pl-3 pr-2 rounded-full hover:bg-gray-100 border border-gray-200 hover:border-gray-300 transition-all duration-200"
+                      className="flex items-center space-x-2 pl-2 pr-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
                     >
-                      <span className="hidden md:block text-sm font-semibold text-gray-700">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center shadow-inner">
+                        <span className="text-white text-xs font-bold">{state.user?.name?.charAt(0) || 'U'}</span>
+                      </div>
+                      <span className="hidden md:block text-sm font-semibold text-white">
                         {state.user?.name}
                       </span>
-                      <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center shadow-sm text-white">
-                        <User className="w-4 h-4" />
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isUserMenuOpen ? "rotate-180" : ""}`}
-                      />
+                      <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isUserMenuOpen ? "rotate-180" : ""}`} />
                     </button>
 
-                    {/* User Dropdown Menu */}
-                    {isUserMenuOpen && (
-                      <div className="absolute right-0 mt-3 w-64 bg-white border border-gray-100 rounded-2xl shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden animate-slide-up origin-top-right">
-                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
-                          <p className="text-sm font-semibold text-gray-900 truncate">
-                            {state.user?.name}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5 truncate">
-                            {state.user?.email || state.user?.phone}
-                          </p>
-                        </div>
-                        <ul className="py-2">
-                          <li>
-                            <Link
-                              to="/dashboard"
-                              onClick={() => setIsUserMenuOpen(false)}
-                              className="flex items-center space-x-3 px-6 py-3 hover:bg-gray-50 transition-colors text-sm text-gray-700"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <User className="w-4 h-4" />
-                              </div>
-                              <span className="font-medium">My Dashboard</span>
+                    <AnimatePresence>
+                      {isUserMenuOpen && (
+                        <motion.div 
+                          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute right-0 mt-3 w-64 bg-gray-900 border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                        >
+                          <div className="p-5 border-b border-white/5 bg-gray-950">
+                            <p className="text-sm font-bold text-white mb-0.5">{state.user?.name}</p>
+                            <p className="text-xs text-gray-500">{state.user?.email || state.user?.phone}</p>
+                          </div>
+                          <div className="p-2 space-y-1">
+                            <Link to="/dashboard" onClick={() => setIsUserMenuOpen(false)} className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 rounded-xl transition-colors">
+                              <User className="w-4 h-4 text-cyan-400" />
+                              <span className="text-sm font-medium text-gray-300">My Dashboard</span>
                             </Link>
-                          </li>
-                          <li>
-                            <Link
-                              to="/profile"
-                              onClick={() => setIsUserMenuOpen(false)}
-                              className="flex items-center space-x-3 px-6 py-3 hover:bg-gray-50 transition-colors text-sm text-gray-700"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
-                                <Settings className="w-4 h-4" />
-                              </div>
-                              <span className="font-medium">
-                                Account Settings
-                              </span>
+                            <Link to="/profile" onClick={() => setIsUserMenuOpen(false)} className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 rounded-xl transition-colors">
+                              <Settings className="w-4 h-4 text-purple-400" />
+                              <span className="text-sm font-medium text-gray-300">Settings</span>
                             </Link>
-                          </li>
-                          <li className="border-t border-gray-100 mt-2 pt-2">
-                            <button
-                              onClick={handleLogout}
-                              className="w-full flex items-center space-x-3 px-6 py-3 hover:bg-red-50 transition-colors text-sm text-red-600"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center">
-                                <LogOut className="w-4 h-4" />
-                              </div>
-                              <span className="font-medium">Logout</span>
+                            <div className="h-px bg-white/5 my-1" />
+                            <button onClick={handleLogout} className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-red-500/10 rounded-xl transition-colors text-red-400">
+                              <LogOut className="w-4 h-4" />
+                              <span className="text-sm font-medium">Logout</span>
                             </button>
-                          </li>
-                        </ul>
-                      </div>
-                    )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
               ) : (
-                // Not logged-in state
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-4">
+                  {/* Language Selector */}
                   <div className="relative hidden sm:block">
                     <button
                       onClick={() => setIsLangOpen(!isLangOpen)}
-                      className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 font-medium text-sm"
+                      className="flex items-center space-x-1.5 text-gray-400 hover:text-white transition-colors text-sm font-medium"
                     >
                       <span>{language}</span>
-                      <ChevronDown className="w-4 h-4" />
+                      <ChevronDown className="w-3.5 h-3.5" />
                     </button>
-                    {isLangOpen && (
-                      <div className="absolute right-0 mt-2 w-32 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden animate-slide-up">
-                        {["EN", "FR", "UR"].map((lang) => (
-                          <div
-                            key={lang}
-                            onClick={() => {
-                              setLanguage(lang);
-                              setIsLangOpen(false);
-                            }}
-                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-sm font-medium text-gray-700 transition-colors hover:text-primary-600"
-                          >
-                            {lang === "EN"
-                              ? "English"
-                              : lang === "FR"
-                                ? "French"
-                                : "Urdu"}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <AnimatePresence>
+                      {isLangOpen && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }}
+                          className="absolute right-0 mt-2 w-32 bg-gray-900 border border-white/10 rounded-xl shadow-xl z-50 p-1"
+                        >
+                          {["EN", "FR", "UR"].map((lang) => (
+                            <button
+                              key={lang}
+                              onClick={() => { setLanguage(lang); setIsLangOpen(false); }}
+                              className="w-full text-left px-4 py-2 hover:bg-white/5 rounded-lg text-sm text-gray-300 hover:text-white transition-colors"
+                            >
+                              {lang === "EN" ? "English" : lang === "FR" ? "French" : "Urdu"}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
-                  {!state.isAuthenticated && (
-                    <Link
-                      to="/login"
-                      className="text-gray-900 font-semibold text-sm hover:text-primary-600 px-4 py-2 transition-colors"
-                    >
-                      Login
-                    </Link>
-                  )}
-                  <Link
-                    to="/signup"
-                    className="bg-gray-900 text-white px-5 py-2.5 rounded-full hover:bg-gray-800 hover:shadow-lg hover:scale-105 transition-all duration-300 text-sm font-semibold shadow-md"
-                  >
+                  <Link to="/login" className="text-white font-semibold text-sm hover:text-cyan-400 transition-colors">
+                    Login
+                  </Link>
+                  <Link to="/signup" className="px-6 py-2.5 rounded-full bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all transform hover:scale-105">
                     Sign up
                   </Link>
                 </div>
               )}
 
-              {/* Mobile Menu Button */}
+              {/* Mobile Menu Toggle */}
               <button
-                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="lg:hidden p-2 text-white hover:bg-white/10 rounded-xl transition-colors"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
               >
-                {isMenuOpen ? (
-                  <X className="w-6 h-6 text-gray-900" />
-                ) : (
-                  <Menu className="w-6 h-6 text-gray-900" />
-                )}
+                {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
             </div>
           </div>
-
-          {/* Mobile Menu */}
-          {isMenuOpen && (
-            <div className="lg:hidden border-t border-gray-100 py-4 space-y-2 animate-fade-in bg-white absolute inset-x-0 px-4 shadow-lg rounded-b-2xl">
-              <Link
-                to="/"
-                className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-700 font-medium"
-              >
-                Home
-              </Link>
-              <Link
-                to="/restaurants"
-                className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-gray-50 text-gray-700 font-medium"
-              >
-                Restaurants
-              </Link>
-
-              {!isAuthenticated && (
-                <div className="pt-4 mt-2 border-t border-gray-100 flex flex-col gap-3">
-                  <Link
-                    to="/login"
-                    className="w-full text-center py-3 rounded-xl border border-gray-200 font-semibold text-gray-900 hover:bg-gray-50"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="w-full text-center py-3 rounded-xl bg-gray-900 text-white font-semibold hover:bg-gray-800"
-                  >
-                    Sign up
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="lg:hidden bg-gray-950 border-t border-white/5 overflow-hidden"
+            >
+              <div className="px-4 py-6 space-y-2">
+                <Link to="/" className="block px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 font-medium">Home</Link>
+                <Link to="/restaurants" className="block px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 font-medium">Restaurants</Link>
+                {!isAuthenticated && (
+                  <div className="pt-4 mt-4 border-t border-white/5 space-y-3">
+                    <Link to="/login" className="block w-full text-center py-3 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5">Login</Link>
+                    <Link to="/signup" className="block w-full text-center py-3 rounded-xl bg-cyan-500 text-gray-900 font-bold">Sign up</Link>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
-      {/* Spacer for fixed header */}
-      <div className="h-16 lg:h-20"></div>
+      {/* Spacers */}
+      <div className="h-20 lg:h-24"></div>
 
-      {/* Modals */}
-      <LocationSelector
-        isOpen={isLocationOpen}
-        onClose={() => setIsLocationOpen(false)}
-      />
-      <VoiceOrderModal
-        isOpen={isVoiceModalOpen}
-        onClose={() => setIsVoiceModalOpen(false)}
-        onOrderSubmit={handleVoiceOrder}
-      />
+      {/* Modals outside header flow */}
+      <LocationSelector isOpen={isLocationOpen} onClose={() => setIsLocationOpen(false)} />
+      <VoiceOrderModal isOpen={isVoiceModalOpen} onClose={() => setIsVoiceModalOpen(false)} onOrderSubmit={handleVoiceOrder} />
 
-      {/* Close user menu when clicking outside */}
-      {isUserMenuOpen && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setIsUserMenuOpen(false)}
-        />
-      )}
+      {/* Close handler for user menu */}
+      {isUserMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />}
     </>
   );
 };

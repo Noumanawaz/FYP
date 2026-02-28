@@ -18,6 +18,7 @@ import ProtectedRoute from "./components/Auth/ProtectedRoute";
 import Checkout from "./pages/Checkout/Checkout";
 import OrderSuccess from "./pages/Orders/OrderSuccess";
 import Orders from "./pages/Orders/Orders";
+import VoicePrompt from "./pages/Home/VoicePrompt";
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
             </Route>
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
+            <Route path="voice-prompt" element={<VoicePrompt />} />
             <Route
               path="restaurant-owner"
               element={
