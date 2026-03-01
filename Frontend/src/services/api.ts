@@ -445,6 +445,20 @@ export class ApiService {
     return this.request(`/menu/restaurant/${restaurantId}${query ? `?${query}` : ""}`);
   }
 
+  async getCategories(restaurantId: string, params?: { is_active?: boolean; parent_category_id?: string }) {
+    const queryParams = new URLSearchParams({ restaurant_id: restaurantId });
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.append(key, String(value));
+      });
+    }
+    return this.request(`/categories?${queryParams.toString()}`);
+  }
+
+  async deleteCategory(categoryId: string) {
+    return this.request(`/categories/${categoryId}`, { method: 'DELETE' });
+  }
+
   async createCategory(categoryData: {
     restaurant_id: string;
     name: string;

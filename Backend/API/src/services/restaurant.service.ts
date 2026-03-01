@@ -37,7 +37,7 @@ export class RestaurantService {
   static async getRestaurantByOwnerId(ownerId: string) {
     const restaurant = await RestaurantModel.findByOwnerId(ownerId);
     if (!restaurant) {
-      throw new AppError("Restaurant not found", 404);
+      return null;  // caller decides what to do — don't throw a 404
     }
     return restaurant;
   }
@@ -133,11 +133,11 @@ export class RestaurantService {
       distance: Math.round(minDistance * 100) / 100,
       nearestLocation: nearestLocation
         ? {
-            location_id: nearestLocation.location_id,
-            address: nearestLocation.address,
-            city: nearestLocation.city,
-            area: nearestLocation.area,
-          }
+          location_id: nearestLocation.location_id,
+          address: nearestLocation.address,
+          city: nearestLocation.city,
+          area: nearestLocation.area,
+        }
         : undefined,
     };
   }

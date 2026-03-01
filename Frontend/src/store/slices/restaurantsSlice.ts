@@ -197,6 +197,10 @@ const restaurantsSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+    clearLocationCache: (state) => {
+      state.lastFetchedLocation = null;
+      state.lastUpdateTime = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -258,5 +262,5 @@ const restaurantsSlice = createSlice({
   },
 });
 
-export const { setFilters, clearFilters, clearError } = restaurantsSlice.actions;
+export const { setFilters, clearFilters, clearError, clearLocationCache } = restaurantsSlice.actions;
 export default restaurantsSlice.reducer;

@@ -136,6 +136,45 @@ export class GeoapifyService {
   }
 
   /**
+   * Reverse Geocode Details: Returns full address breakdown (city, suburb, district, etc.)
+   */
+  async reverseGeocodeDetails(lat: number, lng: number): Promise<{
+    formatted: string;
+    city?: string;
+    suburb?: string;
+    district?: string;
+    county?: string;
+    neighbourhood?: string;
+    country?: string;
+    postcode?: string;
+  } | null> {
+    const key = this.activeApiKey;
+    if (!key) return null;
+    try {
+      const url = `${this.baseUrl}/geocode/reverse?lat=${lat}&lon=${lng}&apiKey=${key}`;
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (data.features && data.features.length > 0) {
+        const p = data.features[0].properties;
+        return {
+          formatted: p.formatted || '',
+          city: p.city || p.municipality || '',
+          suburb: p.suburb || '',
+          district: p.district || '',
+          county: p.county || '',
+          neighbourhood: p.neighbourhood || '',
+          country: p.country || '',
+          postcode: p.postcode || '',
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Routing: Calculate route between two points
    * Cost: 1 credit per request
    */

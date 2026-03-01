@@ -1,8 +1,9 @@
 import os
 import json
 import asyncio
+import tempfile
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -14,6 +15,8 @@ from services.llm_service import GroqLLMService
 from services.orchestrator_service import OrchestratorService
 from services.basic_handler import BasicHandler
 from services.order_handler import OrderHandler
+from build_vector_db import VectorDBBuilder
+from services import neon_vector_store
 
 load_dotenv()
 
@@ -86,6 +89,9 @@ class RestaurantInfo(BaseModel):
 async def startup_event():
     global rag_system, llm_service, orchestrator_service, basic_handler, order_handler
     
+    # Set up NeonDB pgvector table (idempotent)
+    neon_vector_store.setup_table()
+
     print("🚀 Starting Multi-Restaurant RAG Voice Assistant...")
     
     try:
@@ -177,6 +183,119 @@ async def get_restaurants():
         ))
     
     return restaurants
+
+
+# ─── Ingest Restaurant PDF ─────────────────────────────────────────────────────
+
+@app.post("/ingest-restaurant")
+async def ingest_restaurant_pdf(
+    file: UploadFile = File(...),
+    restaurant_id: str = Form(...),
+    restaurant_name: str = Form(...),
+):
+    """
+    Accept a PDF file for a new restaurant, chunk its text, generate embeddings
+    with SentenceTransformer, and upsert into ChromaDB — making the restaurant
+    immediately queryable via the RAG /chat endpoint.
+    """
+    if not rag_system:
+        raise HTTPException(status_code=500, detail="RAG system not initialized")
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
+    print(f"📄 Ingesting PDF for restaurant: {restaurant_name} (id={restaurant_id})")
+
+    # Save uploaded file to a temp location
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+
+    try:
+        # Re-use the VectorDBBuilder's chunking + embedding pipeline
+        builder = VectorDBBuilder(vector_db_dir="vector_db")
+
+        # Extract text from the temp PDF
+        text = builder.extract_text_from_pdf(tmp_path)
+        if not text or len(text.strip()) < 50:
+            raise HTTPException(status_code=422, detail="Could not extract sufficient text from the PDF")
+
+        # Chunk the text
+        chunks = builder.chunk_text(text)
+        if not chunks:
+            raise HTTPException(status_code=422, detail="Text chunking produced no chunks")
+
+        print(f"📝 Created {len(chunks)} chunks for {restaurant_name}")
+
+        # Generate embeddings
+        embeddings = builder.embedding_model.encode(chunks, show_progress_bar=False)
+
+        # ── Store in NeonDB (pgvector) ──────────────────────────────────────
+        try:
+            neon_chunks = neon_vector_store.upsert_chunks(
+                restaurant_id=restaurant_id,
+                restaurant_name=restaurant_name,
+                chunks=chunks,
+                embeddings=embeddings,
+                pdf_filename=file.filename or "",
+            )
+            print(f"✅ Ingested {neon_chunks} chunks for {restaurant_name} into NeonDB (pgvector)")
+        except Exception as neon_err:
+            # Fall back to ChromaDB if NeonDB fails
+            print(f"⚠️ NeonDB insert failed ({neon_err}), falling back to ChromaDB")
+            safe_id = restaurant_id.replace("-", "_").replace(" ", "_")[:40]
+            ids = [f"{safe_id}_chunk_{i}" for i in range(len(chunks))]
+            metadatas = [
+                {
+                    "restaurant_id": restaurant_id,
+                    "restaurant_name": restaurant_name,
+                    "pdf_filename": file.filename,
+                    "chunk_index": i,
+                    "hash": "",
+                    "type": "restaurant_info",
+                }
+                for i in range(len(chunks))
+            ]
+            try:
+                builder.restaurant_collection.delete(where={"restaurant_id": restaurant_id})
+            except Exception:
+                pass
+            builder.restaurant_collection.add(
+                ids=ids,
+                documents=chunks,
+                embeddings=embeddings.tolist(),
+                metadatas=metadatas,
+            )
+            neon_chunks = len(chunks)
+            print(f"✅ Ingested {neon_chunks} chunks for {restaurant_name} into ChromaDB (fallback)")
+
+        chunk_count = neon_chunks
+
+        return {
+            "success": True,
+            "restaurant_id": restaurant_id,
+            "restaurant_name": restaurant_name,
+            "chunks_created": chunk_count,
+            "message": f"Successfully ingested {chunk_count} chunks into the RAG knowledge base",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error ingesting PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+    finally:
+        # Clean up temp file
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 
 # Chat endpoint
 @app.post("/chat", response_model=ChatResponse)

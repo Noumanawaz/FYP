@@ -53,9 +53,12 @@ export class RestaurantController {
     }
   }
 
-  static async create(req: Request, res: Response, next: NextFunction) {
+  static async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const restaurant = await RestaurantService.createRestaurant(req.body);
+      const restaurant = await RestaurantService.createRestaurant({
+        ...req.body,
+        owner_id: req.user?.user_id,   // ← link to the authenticated owner
+      });
       const response: ApiResponse = {
         success: true,
         data: restaurant,
@@ -183,9 +186,12 @@ export class RestaurantController {
       }
 
       const restaurant = await RestaurantService.getRestaurantByOwnerId(req.user.user_id);
+
+      // Return 200 with null data when owner has no restaurant yet
+      // (frontend shows the setup wizard in this case)
       const response: ApiResponse = {
         success: true,
-        data: restaurant,
+        data: restaurant,   // null when not found
       };
       res.json(response);
     } catch (error) {

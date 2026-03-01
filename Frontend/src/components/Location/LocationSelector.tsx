@@ -8,6 +8,8 @@ import LoadingSpinner from "../Common/LoadingSpinner";
 import { geoapifyService } from "../../services/geoapifyService";
 import { apiService } from "../../services/api";
 import MapAddressSelector from "./MapAddressSelector";
+import { useAppDispatch } from "../../store/hooks";
+import { clearLocationCache, fetchNearbyRestaurants } from "../../store/slices/restaurantsSlice";
 
 interface LocationSelectorProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ interface LocationSelectorProps {
 
 const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) => {
   const { state, dispatch } = useApp();
+  const reduxDispatch = useAppDispatch();
   const { coordinates, isLoading, error, getCurrentLocation } = useGeolocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [autocompleteResults, setAutocompleteResults] = useState<any[]>([]);
@@ -36,6 +39,14 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
 
   const handleSelectAddress = (address: Address) => {
     dispatch({ type: "SET_ADDRESS", payload: address });
+    // Clear restaurant cache so fetchNearbyRestaurants bypasses the cache guard
+    reduxDispatch(clearLocationCache());
+    // Immediately fetch restaurants for the newly selected location
+    const lat = address.coordinates?.lat;
+    const lng = address.coordinates?.lng;
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+      reduxDispatch(fetchNearbyRestaurants({ lat, lng, radius: 15 }));
+    }
     onClose();
   };
 
@@ -56,7 +67,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
           // Default address structure
           let addressText = `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
           let city = "Unknown";
-          
+
           // Try to reverse geocode
           try {
             const result = await geoapifyService.reverseGeocode(coordinates.lat, coordinates.lng);
@@ -163,7 +174,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
 
     dispatch({ type: "SET_ADDRESS", payload: address });
     dispatch({ type: "SET_LOCATION", payload: currentLocationCoords });
-    
+
     // Reset form
     setShowCurrentLocationForm(false);
     setCurrentLocationCoords(null);
@@ -203,7 +214,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
     if (newAddress.label && (newAddress.address || selectedMapCoords)) {
       const coords = selectedMapCoords || coordinates || { lat: 33.6844, lng: 73.0479 };
       const fullAddress = newAddress.address || `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`;
-      
+
       const address: Address = {
         id: Date.now().toString(),
         type: newAddress.type,
@@ -372,11 +383,10 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({ isOpen, onClose }) 
                     <button
                       key={type}
                       onClick={() => setNewAddress((prev) => ({ ...prev, type }))}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium capitalize ${
-                        newAddress.type === type
+                      className={`px-3 py-2 rounded-lg text-sm font-medium capitalize ${newAddress.type === type
                           ? "bg-primary-500 text-white"
                           : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
-                      }`}
+                        }`}
                     >
                       {type}
                     </button>
