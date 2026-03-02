@@ -16,7 +16,7 @@ from services.orchestrator_service import OrchestratorService
 from services.basic_handler import BasicHandler
 from services.order_handler import OrderHandler
 from build_vector_db import VectorDBBuilder
-from services import neon_vector_store
+# from services import neon_vector_store
 
 load_dotenv()
 
@@ -90,7 +90,7 @@ async def startup_event():
     global rag_system, llm_service, orchestrator_service, basic_handler, order_handler
     
     # Set up NeonDB pgvector table (idempotent)
-    neon_vector_store.setup_table()
+    # neon_vector_store.setup_table()
 
     print("🚀 Starting Multi-Restaurant RAG Voice Assistant...")
     
@@ -235,14 +235,15 @@ async def ingest_restaurant_pdf(
 
         # ── Store in NeonDB (pgvector) ──────────────────────────────────────
         try:
-            neon_chunks = neon_vector_store.upsert_chunks(
-                restaurant_id=restaurant_id,
-                restaurant_name=restaurant_name,
-                chunks=chunks,
-                embeddings=embeddings,
-                pdf_filename=file.filename or "",
-            )
-            print(f"✅ Ingested {neon_chunks} chunks for {restaurant_name} into NeonDB (pgvector)")
+            # neon_chunks = neon_vector_store.upsert_chunks(
+            #     restaurant_id=restaurant_id,
+            #     restaurant_name=restaurant_name,
+            #     chunks=chunks,
+            #     embeddings=embeddings,
+            #     pdf_filename=file.filename or "",
+            # )
+            # print(f"✅ Ingested {neon_chunks} chunks for {restaurant_name} into NeonDB (pgvector)")
+            raise Exception("NeonDB bypassed locally")
         except Exception as neon_err:
             # Fall back to ChromaDB if NeonDB fails
             print(f"⚠️ NeonDB insert failed ({neon_err}), falling back to ChromaDB")

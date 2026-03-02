@@ -3,7 +3,7 @@ import { Mic, MicOff, X, Send, RotateCcw, MessageSquare, Settings, Volume2 } fro
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 import ChatbotService, { ChatbotMessage, ChatbotResponse } from "../../services/chatbotService";
 import Button from "../Common/Button";
-import { speakWithUplift } from "../../services/ttsService";
+import { speakWithUplift, stopUpliftTTS } from "../../services/ttsService";
 import { getEnvVar } from "../../utils/env";
 
 interface VoiceChatbotModalProps {
@@ -329,6 +329,14 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
     setAudioBlob(null);
     stopListening();
     chatbotService.current.clearConversationHistory();
+
+    // Stop all forms of TTS
+    stopUpliftTTS();
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) { }
+    }
   };
 
   const handleClose = () => {

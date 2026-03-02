@@ -5,7 +5,7 @@ import { VoiceOrderProcessor, ParsedOrder } from "../../utils/voiceOrderProcesso
 import OrderConfirmationModal from "./OrderConfirmationModal";
 import Button from "../Common/Button";
 import ChatbotService from "../../services/chatbotService";
-import { speakWithUplift } from "../../services/ttsService";
+import { speakWithUplift, stopUpliftTTS } from "../../services/ttsService";
 import { getEnvVar } from "../../utils/env";
 
 interface Message {
@@ -217,10 +217,12 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, transcript]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 100);
   };
 
   // Backend integration replaces local stubbed responses
@@ -337,6 +339,14 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
     setShowConfirmation(false);
     setMessages([]);
     stopListening();
+
+    // Stop all forms of TTS
+    stopUpliftTTS();
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) { }
+    }
   };
 
   const handleClose = () => {
@@ -399,174 +409,194 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white overflow-hidden font-sans">
+      <div className="fixed inset-0 z-50 bg-gray-900 text-white overflow-hidden font-sans flex flex-col items-center">
         {/* Premium Futuristic Background */}
-        <div className="absolute inset-0 z-0">
-          {/* Deep Space Gradient */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0f172a] via-[#1e1b4b] to-[#0f172a] z-0"></div>
+        <div className="absolute inset-0 z-0 bg-gray-900 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0f172a] via-[#0f172a] to-[#020617] z-0"></div>
 
-          {/* Aurora Effect */}
-          <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-purple-600/20 rounded-full blur-[120px] animate-pulse"></div>
-          <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-cyan-600/20 rounded-full blur-[120px] animate-pulse delay-700"></div>
-
-          {/* Grid overlay for tech feel */}
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-0 mix-blend-overlay"></div>
+          {/* Blue Aura Effects */}
+          <div className="absolute top-[-10%] left-[-10%] w-[70vw] h-[70vw] bg-primary-600/10 rounded-full blur-[100px] animate-pulse"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[70vw] h-[70vw] bg-blue-600/10 rounded-full blur-[100px] animate-pulse delay-700"></div>
         </div>
 
         {/* Main Content Container */}
-        <div className="relative z-10 w-full max-w-2xl flex flex-col items-center justify-between h-full py-16 px-6">
+        <div className="relative z-10 w-full max-w-3xl h-full flex flex-col pt-4 sm:pt-6 pb-4 sm:px-6">
 
           {/* Minimal Header */}
-          <div className="w-full flex justify-between items-center opacity-70">
+          <div className="px-4 w-full flex justify-between items-center opacity-80 shrink-0 h-10">
             <div className="flex items-center gap-2">
-              <Bot className="w-5 h-5 text-cyan-300" />
-              <span className="text-xs font-medium tracking-widest text-cyan-100/80 uppercase">VOCABITE AI</span>
+              <Bot className="w-6 h-6 text-primary-400" />
+              <span className="text-sm font-semibold tracking-wider text-primary-50 uppercase">Order AI</span>
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Connection Status */}
-              <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm">
-                <div className={`w-1.5 h-1.5 rounded-full ${isListening ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
-                <span className="text-[10px] font-bold tracking-wider uppercase text-white/80">
+              <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm">
+                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-white/90">
                   {isListening ? "LISTENING" : isProcessing ? "THINKING" : isSpeaking ? "SPEAKING" : "IDLE"}
                 </span>
               </div>
-
-              <button onClick={handleClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                <X className="w-5 h-5 text-white/70" />
-              </button>
             </div>
           </div>
 
-          {/* Central Intelligence Visualizer */}
-          <div className="flex-1 flex flex-col items-center justify-center w-full relative">
-
-            {!hasStarted ? (
-              /* Initial Start State */
-              <div className="flex flex-col items-center animate-fade-in-up">
+          {!hasStarted ? (
+            /* Initial Start State */
+            <div className="flex-1 flex flex-col items-center justify-center w-full animate-fade-in-up">
+              <div className="relative w-48 h-48 flex items-center justify-center mb-8">
+                <div className="absolute inset-0 border border-primary-500/20 rounded-full animate-[spin_10s_linear_infinite] scale-110"></div>
+                <div className="absolute inset-0 border border-primary-400/30 rounded-full animate-[spin_15s_linear_infinite_reverse] scale-125"></div>
                 <button
                   onClick={handleStartCall}
-                  className="group relative w-32 h-32 flex items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-400/30 hover:bg-cyan-500/20 transition-all duration-500 hover:scale-110 hover:shadow-[0_0_50px_rgba(34,211,238,0.3)]"
+                  className="group relative w-36 h-36 flex items-center justify-center rounded-full bg-primary-500/10 border border-primary-400/40 hover:bg-primary-500/20 transition-all duration-500 hover:scale-105 shadow-[0_0_40px_rgba(14,165,233,0.15)] hover:shadow-[0_0_60px_rgba(14,165,233,0.3)] z-10"
                 >
-                  <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-cyan-400 duration-3000"></div>
-                  <Mic className="w-10 h-10 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
+                  <div className="absolute inset-0 rounded-full animate-ping opacity-20 bg-primary-400 duration-[3000ms]"></div>
+                  <Mic className="w-12 h-12 text-primary-400 group-hover:text-primary-300 transition-colors drop-shadow-md" />
                 </button>
-                <p className="mt-8 text-cyan-200/60 font-light tracking-widest text-sm uppercase">Tap to Connect</p>
               </div>
-            ) : (
-              /* Active Call State */
-              <>
-                {/* Status Indicator (Prominent) */}
-                <div className="absolute top-10 flex flex-col items-center gap-2 animate-fade-in-up">
-                  <span className={`text-sm font-bold tracking-[0.2em] uppercase transition-colors duration-500 ${isListening ? "text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" :
-                    isProcessing ? "text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.8)]" :
-                      isSpeaking ? "text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.8)]" :
-                        "text-slate-400"
-                    }`}>
-                    {isListening ? "Listening..." : isProcessing ? "Thinking..." : isSpeaking ? "Speaking..." : "Standby"}
-                  </span>
+              <h2 className="text-2xl font-light text-white mb-2 tracking-wide">Start Voice Order</h2>
+              <p className="text-primary-200/60 font-light tracking-widest text-sm uppercase">Tap microphone to connect</p>
+            </div>
+          ) : (
+            /* Active Call State */
+            <div className="flex-1 min-h-0 w-full flex flex-col">
+
+              {/* Chat History Area (Scrollable space natively expanding) */}
+              <div
+                id="chat-scroll-container"
+                className="flex-1 overflow-y-auto px-4 sm:px-6 scroll-smooth"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+              >
+                <div className="flex flex-col min-h-full">
+                  <div className="flex flex-col gap-6 py-6 mt-auto">
+                    {messages.map((msg) => (
+                      <div key={msg.id} className={`flex w-full ${msg.type === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+                        <div className={`max-w-[85%] sm:max-w-[75%] p-4 rounded-[24px] ${msg.type === 'user'
+                          ? 'bg-primary-500 text-white rounded-br-sm shadow-[0_4px_25px_rgba(14,165,233,0.25)]'
+                          : msg.isTyping
+                            ? 'bg-transparent border border-white/10 text-gray-400 rounded-bl-sm'
+                            : 'bg-white/10 backdrop-blur-md text-gray-50 rounded-bl-sm border border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.2)]'
+                          }`}>
+                          {msg.isTyping ? (
+                            <div className="flex items-center gap-1.5 h-6 px-2">
+                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                            </div>
+                          ) : (
+                            <p className="text-[15px] sm:text-[16px] leading-[1.6] font-normal tracking-wide">{msg.content}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* User Active Transcript */}
+                    {transcript && (
+                      <div className="flex w-full justify-end animate-fade-in-up">
+                        <div className="max-w-[85%] sm:max-w-[75%] p-4 rounded-[24px] bg-primary-500/40 backdrop-blur-md text-white rounded-br-sm border border-primary-400/30 shadow-[0_4px_20px_rgba(14,165,233,0.15)]">
+                          <p className="text-[15px] sm:text-[16px] leading-[1.6] font-normal flex items-baseline gap-2">
+                            {transcript}
+                            <span className="flex gap-1">
+                              <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce"></span>
+                              <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                              <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
                 </div>
+              </div>
 
-                {/* The "Brain" Orb */}
-                <div className="relative w-72 h-72 flex items-center justify-center mb-8 mt-4">
-                  {/* Rotating Rings */}
-                  <div className={`absolute inset-0 border border-cyan-500/10 rounded-full box-border transition-all duration-1000 ${isListening ? 'scale-110 opacity-40 animate-[spin_10s_linear_infinite]' : 'scale-100 opacity-20'}`}></div>
-                  <div className={`absolute inset-6 border border-purple-500/10 rounded-full box-border transition-all duration-1000 delay-100 ${isProcessing ? 'scale-105 opacity-50 animate-[spin_5s_linear_infinite_reverse]' : 'scale-100 opacity-20'}`}></div>
+              {/* Call Controls Area */}
+              <div className="w-full shrink-0 flex flex-col items-center pt-4 pb-2 border-t border-white/5 bg-gradient-to-t from-[#0f172a] to-transparent">
 
-                  {/* Core Glow */}
-                  <div className={`
-                                w-48 h-48 rounded-full blur-2xl transition-all duration-700
-                                ${isListening ? 'bg-cyan-500/30' : ''}
-                                ${isProcessing ? 'bg-purple-500/40' : ''}
-                                ${isSpeaking ? 'bg-green-500/30' : ''}
-                                ${!isListening && !isProcessing && !isSpeaking ? 'bg-slate-500/10' : ''}
-                            `}></div>
+                {/* Voice Visualizer Orb */}
+                <div className="relative w-24 h-24 flex items-center justify-center mb-6">
+                  {/* Outer Rings */}
+                  <div className={`absolute inset-0 border border-primary-500/10 rounded-full box-border transition-all duration-700 ${isListening ? 'scale-125 opacity-100 animate-[spin_8s_linear_infinite]' : 'scale-100 opacity-20'}`}></div>
+                  <div className={`absolute inset-2 border border-blue-400/20 rounded-full box-border transition-all duration-700 delay-75 ${isProcessing ? 'scale-110 opacity-70 animate-[spin_4s_linear_infinite_reverse]' : 'scale-100 opacity-20'}`}></div>
 
-                  {/* Central Element */}
-                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                  {/* Core Status Block */}
+                  <div className={`absolute inset-0 flex items-center justify-center rounded-full backdrop-blur-sm transition-all duration-500 border
+                     ${isListening ? 'bg-primary-500/10 border-primary-400/30 shadow-[0_0_30px_rgba(14,165,233,0.2)]' :
+                      isSpeaking ? 'bg-green-500/10 border-green-400/30' :
+                        'bg-white/5 border-white/10'}
+                  `}>
                     {isSpeaking ? (
-                      <div className="flex items-center gap-2 h-16">
-                        {[1, 2, 3, 2, 1].map((scale, i) => (
-                          <div key={i} className="w-2 bg-green-400 rounded-full animate-wave shadow-[0_0_15px_rgba(74,222,128,0.5)]" style={{ height: `${scale * 10}px`, animationDelay: `${i * 0.1}s` }}></div>
+                      <div className="flex items-center gap-1.5 h-8">
+                        {[1, 2.5, 4, 2.5, 1].map((scale, i) => (
+                          <div key={i} className="w-1.5 bg-green-400 rounded-full animate-wave shadow-[0_0_10px_rgba(74,222,128,0.5)]" style={{ height: `${scale * 6}px`, animationDelay: `${i * 0.1}s` }}></div>
                         ))}
                       </div>
                     ) : isProcessing ? (
-                      <div className="w-16 h-16 border-4 border-t-purple-400 border-r-purple-400/30 border-b-purple-400/10 border-l-purple-400/60 rounded-full animate-spin shadow-[0_0_20px_rgba(192,132,252,0.4)]"></div>
+                      <div className="w-10 h-10 border-[3px] border-t-blue-400 border-r-blue-400/30 border-b-blue-400/10 border-l-blue-400/60 rounded-full animate-spin"></div>
                     ) : (
-                      <div className={`w-40 h-40 rounded-full border border-white/10 flex items-center justify-center backdrop-blur-sm transition-all duration-500 ${isListening ? 'bg-cyan-500/10 shadow-[0_0_30px_rgba(34,211,238,0.2)] scale-110' : 'bg-white/5'}`}>
-                        <Mic className={`w-10 h-10 transition-colors duration-300 ${isListening ? 'text-cyan-400' : 'text-white/20'}`} />
-                      </div>
+                      <Bot className={`w-8 h-8 transition-colors duration-300 ${isListening ? 'text-primary-400' : 'text-white/40'}`} />
                     )}
                   </div>
                 </div>
 
-                {/* Live Subtitles */}
-                <div className="w-full max-w-xl text-center min-h-[160px] flex flex-col justify-end pb-8 relative z-20">
-                  {/* User Transcript */}
-                  {transcript && (
-                    <h2 className="text-3xl md:text-4xl font-light text-white leading-tight animate-fade-in-up tracking-tight">
-                      "{transcript}"
-                    </h2>
-                  )}
+                {/* Status Text */}
+                <span className={`text-xs font-bold tracking-[0.2em] uppercase transition-colors duration-500 mb-6 ${isListening ? "text-primary-400" :
+                  isProcessing ? "text-blue-400" :
+                    isSpeaking ? "text-green-400" :
+                      "text-slate-500"
+                  }`}>
+                  {isListening ? "Listening..." : isProcessing ? "Thinking..." : isSpeaking ? "Speaking..." : "Standby"}
+                </span>
 
-                  {/* Bot Response */}
-                  {!transcript && messages.length > 0 && (
-                    <h2 className="text-2xl md:text-3xl font-light text-cyan-50 leading-relaxed animate-fade-in-up tracking-tight drop-shadow-[0_0_15px_rgba(165,243,252,0.3)]">
-                      {messages[messages.length - 1].content}
-                    </h2>
-                  )}
+                {/* Buttons */}
+                <div className="flex gap-6 items-center">
+                  <button
+                    onClick={handleToggleListening}
+                    className={`
+                      w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 border hover:scale-105 active:scale-95
+                      ${isListening
+                        ? 'bg-red-500/20 text-red-500 border-red-500/30 hover:bg-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.15)]'
+                        : 'bg-primary-500 text-white border-primary-400/50 hover:bg-primary-600 shadow-[0_0_20px_rgba(14,165,233,0.2)]'}
+                    `}
+                  >
+                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
 
-                  {/* Hint Loop */}
-                  {!transcript && messages.length <= 1 && !isSpeaking && (
-                    <p className="mt-6 text-sm text-cyan-200/40 font-light tracking-wide uppercase animate-pulse">
-                      Try saying "I'm craving Biryani"
-                    </p>
-                  )}
+                  <button
+                    onClick={handleClose}
+                    className="w-14 h-14 rounded-full bg-white/10 text-white/70 border border-white/10 flex items-center justify-center hover:bg-white/20 hover:text-white transition-all duration-300 hover:scale-105"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-              </>
-            )}
-          </div>
 
-          {/* Bottom Controls (Minimal) */}
-          <div className="flex gap-6 items-center z-20">
-            {hasStarted && (
-              <button
-                onClick={handleToggleListening}
-                className={`
-                            w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 backdrop-blur-md border hover:scale-105 active:scale-95
-                            ${isListening
-                    ? 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)]'
-                    : 'bg-white/5 text-white border-white/10 hover:bg-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]'}
-                        `}
-              >
-                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-            )}
+              </div>
+            </div>
+          )}
 
-            <button
-              onClick={handleClose}
-              className="w-14 h-14 rounded-full bg-white/5 text-white/50 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:text-white transition-all duration-300 hover:scale-105"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
         </div>
 
         {/* Global Styles for this component's animations */}
         <style>{`
             @keyframes wave {
-                0%, 100% { height: 10px; }
-                50% { height: 30px; }
+                0%, 100% { height: 6px; }
+                50% { height: 24px; }
             }
             .animate-fade-in-up {
-                animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             }
             @keyframes fadeInUp {
-                from { opacity: 0; transform: translateY(20px) scale(0.95); }
-                to { opacity: 1; transform: translateY(0) scale(1); }
+                from { opacity: 0; transform: translateY(15px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
             }
         `}</style>
-      </div >
+      </div>
 
       {/* Order Confirmation Modal - Kept as before */}
       {parsedOrder && <OrderConfirmationModal isOpen={showConfirmation} onClose={() => setShowConfirmation(false)} onConfirm={handleConfirmOrder} onEdit={handleEditOrder} parsedOrder={parsedOrder} confirmationMessage={VoiceOrderProcessor.generateConfirmationMessage(parsedOrder)} />}

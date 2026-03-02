@@ -5,6 +5,28 @@ export interface UpliftTTSResult {
   duration?: number;
 }
 
+// Track active audio so we can stop it if needed
+let activeAudio: HTMLAudioElement | null = null;
+let activeObjectURL: string | null = null;
+
+export function stopUpliftTTS() {
+  if (activeAudio) {
+    try {
+      activeAudio.pause();
+      activeAudio.currentTime = 0;
+    } catch (e) {
+      console.error("Error stopping Uplift TTS:", e);
+    }
+    activeAudio = null;
+  }
+  if (activeObjectURL) {
+    try {
+      URL.revokeObjectURL(activeObjectURL);
+    } catch (e) { }
+    activeObjectURL = null;
+  }
+}
+
 /**
  * Convert text to speech using Uplift AI API
  * @param text - The text to convert to speech
@@ -44,28 +66,34 @@ export async function speakWithUplift(
   const audioDurationHeader = response.headers.get('x-uplift-ai-audio-duration');
   const audioDuration = audioDurationHeader ? parseFloat(audioDurationHeader) : undefined;
 
+  // Stop any existing playback before starting new one
+  stopUpliftTTS();
+
   const audioBlob = await response.blob();
 
   // Play the audio
   const audioUrl = URL.createObjectURL(audioBlob);
   const audio = new Audio(audioUrl);
 
+  activeAudio = audio;
+  activeObjectURL = audioUrl;
+
   // Clean up the object URL after playback ends
   return new Promise((resolve, reject) => {
     // Clean up the object URL after playback ends
     audio.addEventListener('ended', () => {
-      URL.revokeObjectURL(audioUrl);
+      if (activeObjectURL === audioUrl) stopUpliftTTS();
       resolve({ duration: audioDuration });
     }, { once: true });
 
     audio.addEventListener('error', (e) => {
-      URL.revokeObjectURL(audioUrl);
+      if (activeObjectURL === audioUrl) stopUpliftTTS();
       reject(e);
     });
 
     audio.play().catch((err) => {
       // Clean up on play error
-      URL.revokeObjectURL(audioUrl);
+      if (activeObjectURL === audioUrl) stopUpliftTTS();
       reject(err);
     });
   });
