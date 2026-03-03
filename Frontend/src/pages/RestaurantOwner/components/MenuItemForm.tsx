@@ -149,16 +149,16 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#111] border border-white/5 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">{menuItem ? 'Edit Menu Item' : 'Create Menu Item'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-400">
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-200 rounded-lg text-red-400 text-sm">
             {error}
           </div>
         )}
@@ -166,12 +166,12 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
               <select
                 required
                 value={formData.category_id}
                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
               >
                 <option value="">Select a category</option>
                 {categories.map((cat) => (
@@ -183,38 +183,38 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Item Name *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Item Name *</label>
               <input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
                 placeholder="e.g., Margherita Pizza"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Description *</label>
             <textarea
               required
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
               placeholder="Describe the menu item..."
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Base Price *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Base Price *</label>
               <div className="flex">
                 <select
                   value={formData.currency}
                   onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                  className="px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-l-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
                 >
                   <option value="USD">USD</option>
                   <option value="PKR">PKR</option>
@@ -227,43 +227,43 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
                   min="0"
                   value={formData.base_price}
                   onChange={(e) => setFormData({ ...formData, base_price: e.target.value })}
-                  className="flex-1 px-3 py-2 border border-gray-300 border-l-0 rounded-r-lg focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] border-l-0 rounded-r-lg focus:ring-2 focus:ring-cyan-500/50"
                   placeholder="0.00"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Preparation Time (minutes)</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Preparation Time (minutes)</label>
               <input
                 type="number"
                 min="0"
                 value={formData.preparation_time}
                 onChange={(e) => setFormData({ ...formData, preparation_time: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
                 placeholder="e.g., 15"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Calories</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Calories</label>
               <input
                 type="number"
                 min="0"
                 value={formData.calories}
                 onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
                 placeholder="e.g., 350"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Spice Level</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Spice Level</label>
             <select
               value={formData.spice_level}
               onChange={(e) => setFormData({ ...formData, spice_level: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
             >
               <option value="mild">Mild</option>
               <option value="medium">Medium</option>
@@ -283,32 +283,32 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Dietary Tags</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Dietary Tags</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
                 value={newDietaryTag}
                 onChange={(e) => setNewDietaryTag(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDietaryTag())}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50"
                 placeholder="e.g., Vegetarian, Vegan, Gluten-Free"
               />
               <button
                 type="button"
                 onClick={addDietaryTag}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {formData.dietary_tags.map((tag, index) => (
-                <span key={index} className="px-3 py-1 bg-green-100 text-green-800 rounded-lg flex items-center gap-2 text-sm">
+                <span key={index} className="px-3 py-1 bg-green-500/20 text-green-400 rounded-lg flex items-center gap-2 text-sm">
                   {tag}
                   <button
                     type="button"
                     onClick={() => removeDietaryTag(index)}
-                    className="text-green-600 hover:text-green-800"
+                    className="text-green-500 hover:text-green-400"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -318,32 +318,32 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ingredients</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Ingredients</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
                 value={newIngredient}
                 onChange={(e) => setNewIngredient(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addIngredient())}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50"
                 placeholder="e.g., Tomato, Cheese, Basil"
               />
               <button
                 type="button"
                 onClick={addIngredient}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {formData.ingredients.map((ing, index) => (
-                <span key={index} className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg flex items-center gap-2 text-sm">
+                <span key={index} className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-lg flex items-center gap-2 text-sm">
                   {ing}
                   <button
                     type="button"
                     onClick={() => removeIngredient(index)}
-                    className="text-yellow-600 hover:text-yellow-800"
+                    className="text-yellow-500 hover:text-yellow-400"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -353,32 +353,32 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Allergens</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Allergens</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
                 value={newAllergen}
                 onChange={(e) => setNewAllergen(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAllergen())}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50"
                 placeholder="e.g., Nuts, Dairy, Gluten"
               />
               <button
                 type="button"
                 onClick={addAllergen}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {formData.allergens.map((all, index) => (
-                <span key={index} className="px-3 py-1 bg-red-100 text-red-800 rounded-lg flex items-center gap-2 text-sm">
+                <span key={index} className="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg flex items-center gap-2 text-sm">
                   {all}
                   <button
                     type="button"
                     onClick={() => removeAllergen(index)}
-                    className="text-red-600 hover:text-red-800"
+                    className="text-red-500 hover:text-red-400"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -394,9 +394,9 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
                 id="is_available"
                 checked={formData.is_available}
                 onChange={(e) => setFormData({ ...formData, is_available: e.target.checked })}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-cyan-400 border-[rgba(255,255,255,0.2)] rounded focus:ring-cyan-500/50"
               />
-              <label htmlFor="is_available" className="ml-2 text-sm text-gray-700">
+              <label htmlFor="is_available" className="ml-2 text-sm text-gray-300">
                 Available
               </label>
             </div>
@@ -406,9 +406,9 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
                 id="is_featured"
                 checked={formData.is_featured}
                 onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-cyan-400 border-[rgba(255,255,255,0.2)] rounded focus:ring-cyan-500/50"
               />
-              <label htmlFor="is_featured" className="ml-2 text-sm text-gray-700">
+              <label htmlFor="is_featured" className="ml-2 text-sm text-gray-300">
                 Featured
               </label>
             </div>
@@ -418,14 +418,14 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg hover:bg-[#050505]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
               {loading ? 'Saving...' : menuItem ? 'Update' : 'Create'}

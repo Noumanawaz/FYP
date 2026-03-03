@@ -11,15 +11,15 @@ import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { setFilters } from "../../store/slices/restaurantsSlice";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Custom VOCABITE Logo Component
-const VOCABITELogo: React.FC = () => {
+// Custom VOCABITELogo Component
+export const VOCABITELogo: React.FC = () => {
   return (
     <div
       className="flex items-center text-2xl sm:text-3xl font-extrabold tracking-tight group"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
       <span className="text-white group-hover:text-cyan-400 transition-colors duration-300">V</span>
-      
+
       {/* Microphone Icon */}
       <div className="mx-1 relative">
         <Mic className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 group-hover:scale-110 transition-transform duration-300" />
@@ -44,7 +44,7 @@ const Header: React.FC = () => {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     reduxDispatch(setFilters({ search: e.target.value }));
     if (location.pathname !== '/restaurants' && e.target.value.trim() !== '') {
-       navigate('/restaurants');
+      navigate('/restaurants');
     }
   };
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -87,18 +87,17 @@ const Header: React.FC = () => {
   const isAuthenticated = state.isAuthenticated && state.user;
 
   // Header Animation Configuration
-  const headerClasses = `fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-    scrolled
+  const headerClasses = `fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled
       ? "bg-[#050505]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)] border-b border-white/5"
       : "bg-[#050505] border-b border-transparent"
-  }`;
+    }`;
 
   return (
     <>
       <header className={headerClasses}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20 lg:h-24">
-            
+
             {/* Logo */}
             <Link to="/" className="flex items-center group relative z-10">
               <VOCABITELogo />
@@ -112,7 +111,7 @@ const Header: React.FC = () => {
             {/* Middle Section - Search & Location */}
             {isAuthenticated && (
               <div className="hidden lg:flex items-center flex-1 mx-12 space-x-6">
-                
+
                 {/* Modern Location Selector */}
                 <button
                   onClick={() => setIsLocationOpen(true)}
@@ -141,7 +140,7 @@ const Header: React.FC = () => {
                       onChange={handleSearchChange}
                       className="w-full pl-12 pr-16 py-3.5 bg-[#111] border border-gray-800 focus:border-cyan-500/50 rounded-2xl focus:ring-4 focus:ring-cyan-500/10 transition-all text-white placeholder-gray-500 outline-none shadow-inner"
                     />
-                    
+
                     {/* Floating Glow on focus */}
                     <div className="absolute inset-0 -z-10 rounded-2xl bg-cyan-500/0 group-focus-within:bg-cyan-500/5 blur-xl transition-all duration-500 pointer-events-none"></div>
 
@@ -159,7 +158,7 @@ const Header: React.FC = () => {
 
             {/* Right Actions */}
             <div className="flex items-center space-x-3 sm:space-x-5 relative z-10">
-              
+
               {/* Notifications */}
               {isAuthenticated && (
                 <button className="relative p-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors group">
@@ -172,7 +171,7 @@ const Header: React.FC = () => {
 
               {state.isAuthenticated ? (
                 <div className="flex items-center space-x-3 sm:space-x-4">
-                  
+
                   {/* Cart */}
                   <Link
                     to="/cart"
@@ -203,7 +202,7 @@ const Header: React.FC = () => {
 
                     <AnimatePresence>
                       {isUserMenuOpen && (
-                        <motion.div 
+                        <motion.div
                           initial={{ opacity: 0, scale: 0.95, y: 10 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -247,7 +246,7 @@ const Header: React.FC = () => {
                     </button>
                     <AnimatePresence>
                       {isLangOpen && (
-                        <motion.div 
+                        <motion.div
                           initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }}
                           className="absolute right-0 mt-2 w-32 bg-gray-900 border border-white/10 rounded-xl shadow-xl z-50 p-1"
                         >
@@ -288,7 +287,7 @@ const Header: React.FC = () => {
         {/* Mobile Menu Dropdown */}
         <AnimatePresence>
           {isMenuOpen && (
-            <motion.div 
+            <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}

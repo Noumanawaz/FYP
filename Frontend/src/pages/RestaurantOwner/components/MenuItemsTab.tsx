@@ -41,7 +41,11 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [availabilityFilter, setAvailabilityFilter] = useState<string>('all');
 
+  const hasLoaded = React.useRef(false);
+
   useEffect(() => {
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
     loadCategories();
     loadMenuItems();
   }, [restaurantId]);
@@ -112,7 +116,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading menu items...</p>
+        <p className="text-gray-400">Loading menu items...</p>
       </div>
     );
   }
@@ -122,11 +126,11 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h3 className="text-xl font-semibold">Menu Items</h3>
-          <p className="text-sm text-gray-600 mt-1">Manage your restaurant menu items</p>
+          <p className="text-sm text-gray-400 mt-1">Manage your restaurant menu items</p>
         </div>
         <button
           onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400"
         >
           <Plus className="w-4 h-4" />
           Add Menu Item
@@ -134,23 +138,23 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-200 rounded-lg text-red-400">
           {error}
         </div>
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4 items-center">
+      <div className="bg-[#111] border border-white/5 rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4 items-center">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Filters:</span>
+          <span className="text-sm font-medium text-gray-300">Filters:</span>
         </div>
         <div>
-          <label className="text-sm text-gray-600 mr-2">Category:</label>
+          <label className="text-sm text-gray-400 mr-2">Category:</label>
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
           >
             <option value="all">All Categories</option>
             {categories.map((cat) => (
@@ -161,11 +165,11 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-600 mr-2">Availability:</label>
+          <label className="text-sm text-gray-400 mr-2">Availability:</label>
           <select
             value={availabilityFilter}
             onChange={(e) => setAvailabilityFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
           >
             <option value="all">All</option>
             <option value="available">Available</option>
@@ -175,9 +179,9 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
       </div>
 
       {filteredItems.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-8 text-center">
           <UtensilsCrossed className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 mb-4">
+          <p className="text-gray-400 mb-4">
             {menuItems.length === 0 
               ? 'No menu items yet. Create your first menu item to get started.'
               : 'No menu items match your filters.'}
@@ -185,7 +189,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
           {menuItems.length === 0 && (
             <button
               onClick={handleCreate}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400"
             >
               Create Menu Item
             </button>
@@ -196,7 +200,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
           {filteredItems.map((item) => {
             const category = categories.find(c => c.category_id === item.category_id);
             return (
-              <div key={item.item_id} className="bg-white rounded-lg shadow p-4">
+              <div key={item.item_id} className="bg-[#111] border border-white/5 rounded-lg shadow p-4">
                 {item.image_urls && item.image_urls.length > 0 && (
                   <img
                     src={item.image_urls[0]}
@@ -211,10 +215,10 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
                   <h4 className="font-semibold text-lg">{item.name}</h4>
                   <div className="flex gap-1">
                     {item.is_featured && (
-                      <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">Featured</span>
+                      <span className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded-full">Featured</span>
                     )}
                     <span className={`px-2 py-1 text-xs rounded-full ${
-                      item.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      item.is_available ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-gray-200'
                     }`}>
                       {item.is_available ? 'Available' : 'Unavailable'}
                     </span>
@@ -223,9 +227,9 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
                 {category && (
                   <p className="text-xs text-gray-500 mb-2">{category.name}</p>
                 )}
-                <p className="text-sm text-gray-600 mb-2 line-clamp-2">{item.description}</p>
+                <p className="text-sm text-gray-400 mb-2 line-clamp-2">{item.description}</p>
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-lg font-bold text-blue-600">
+                  <span className="text-lg font-bold text-cyan-400">
                     {item.currency || 'USD'} {typeof item.base_price === 'number' ? item.base_price.toFixed(2) : parseFloat(item.base_price || '0').toFixed(2)}
                   </span>
                   {item.preparation_time && (
@@ -235,7 +239,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
                 {item.dietary_tags && item.dietary_tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-2">
                     {item.dietary_tags.slice(0, 3).map((tag, idx) => (
-                      <span key={idx} className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                      <span key={idx} className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded">
                         {tag}
                       </span>
                     ))}
@@ -244,14 +248,14 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
                 <div className="flex gap-2 mt-4">
                   <button
                     onClick={() => handleEdit(item)}
-                    className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center justify-center gap-2 text-sm"
+                    className="flex-1 px-3 py-2 bg-cyan-500/10 text-cyan-400 rounded-lg hover:bg-cyan-500/20 flex items-center justify-center gap-2 text-sm"
                   >
                     <Edit className="w-4 h-4" />
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(item.item_id)}
-                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center justify-center gap-2 text-sm"
+                    className="px-3 py-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 flex items-center justify-center gap-2 text-sm"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

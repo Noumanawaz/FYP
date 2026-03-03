@@ -71,7 +71,7 @@ const TagInput: React.FC<TagInputProps> = ({
     tags,
     onChange,
     placeholder = 'Type and press Enter or comma',
-    color = 'bg-blue-100 text-blue-800',
+    color = 'bg-cyan-500/20 text-blue-800',
 }) => {
     const [input, setInput] = useState('');
 
@@ -98,8 +98,8 @@ const TagInput: React.FC<TagInputProps> = ({
 
     return (
         <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
-            <div className="min-h-[52px] flex flex-wrap gap-2 items-center px-3 py-2 border-2 border-gray-200 rounded-xl focus-within:border-blue-500 bg-white transition-colors cursor-text">
+            <label className="block text-sm font-semibold text-gray-300 mb-2">{label}</label>
+            <div className="min-h-[52px] flex flex-wrap gap-2 items-center px-3 py-2 border-2 border-white/10 rounded-xl focus-within:border-cyan-500 bg-[#111] border border-white/5 transition-colors cursor-text">
                 {tags.map((tag, i) => (
                     <span
                         key={i}
@@ -116,7 +116,7 @@ const TagInput: React.FC<TagInputProps> = ({
                     </span>
                 ))}
                 <input
-                    className="flex-1 min-w-[140px] outline-none bg-transparent text-sm text-gray-700 placeholder-gray-400"
+                    className="flex-1 min-w-[140px] outline-none bg-transparent text-sm text-gray-300 placeholder-gray-400"
                     placeholder={tags.length === 0 ? placeholder : ''}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -172,19 +172,19 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
     };
 
     return (
-        <div className="relative bg-white border-2 border-gray-200 rounded-2xl p-6 hover:border-blue-300 transition-colors">
+        <div className="relative bg-[#111] border border-white/5 border-2 border-white/10 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors">
             <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500 text-gray-900 text-white flex items-center justify-center font-bold text-sm">
                         {index + 1}
                     </div>
-                    <h4 className="font-bold text-gray-900">Branch {index + 1}</h4>
+                    <h4 className="font-bold text-white">Branch {index + 1}</h4>
                 </div>
                 {canRemove && (
                     <button
                         type="button"
                         onClick={() => onRemove(index)}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
@@ -196,8 +196,8 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
                 type="button"
                 onClick={() => setIsMapOpen(true)}
                 className={`w-full mb-4 px-4 py-3 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 text-sm transition-all ${branch.lat && branch.lng
-                    ? 'border-green-400 bg-green-50 text-green-700'
-                    : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 text-gray-600'
+                    ? 'border-green-400 bg-green-500/10 text-green-400'
+                    : 'border-[rgba(255,255,255,0.2)] hover:border-cyan-500/40 hover:bg-cyan-500/10 text-gray-400'
                     }`}
             >
                 <MapPin className="w-4 h-4" />
@@ -208,46 +208,46 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">City *</label>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">City *</label>
                     <input
                         type="text"
                         required
                         value={branch.city}
                         onChange={(e) => update('city', e.target.value)}
                         placeholder="e.g., Lahore"
-                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-sm transition-colors"
+                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors bg-[#111] text-white"
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Area *</label>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Area *</label>
                     <input
                         type="text"
                         required
                         value={branch.area}
                         onChange={(e) => update('area', e.target.value)}
                         placeholder="e.g., Gulberg"
-                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-sm transition-colors"
+                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors bg-[#111] text-white"
                     />
                 </div>
                 <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Full Address *</label>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Full Address *</label>
                     <textarea
                         required
                         value={branch.address}
                         onChange={(e) => update('address', e.target.value)}
                         placeholder="Street address, building no., etc."
                         rows={2}
-                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-sm transition-colors resize-none"
+                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors resize-none bg-[#111] text-white"
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Phone</label>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Phone</label>
                     <input
                         type="tel"
                         value={branch.phone}
                         onChange={(e) => update('phone', e.target.value)}
                         placeholder="+92 300 1234567"
-                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-sm transition-colors"
+                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors bg-[#111] text-white"
                     />
                 </div>
             </div>
@@ -280,28 +280,28 @@ interface ReviewProps {
 const ReviewPanel: React.FC<ReviewProps> = ({ basic, identity, branches }) => (
     <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100">
+        <div className="flex items-center gap-4 p-5 bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 rounded-2xl border border-blue-100">
             {basic.logo_url ? (
                 <img src={basic.logo_url} alt="Logo" className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow" />
             ) : (
-                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow">
+                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold shadow">
                     {basic.name.charAt(0).toUpperCase()}
                 </div>
             )}
             <div>
-                <h3 className="text-xl font-bold text-gray-900">{basic.name}</h3>
+                <h3 className="text-xl font-bold text-white">{basic.name}</h3>
                 <p className="text-sm text-gray-500 mt-0.5">{basic.country}{basic.founded_year ? ` · Est. ${basic.founded_year}` : ''}</p>
-                <span className="mt-1 inline-block px-3 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold capitalize">{basic.price_range}</span>
+                <span className="mt-1 inline-block px-3 py-0.5 bg-cyan-500/20 text-blue-800 rounded-full text-xs font-semibold capitalize">{basic.price_range}</span>
             </div>
         </div>
 
         {/* Identity */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><Tag className="w-4 h-4 text-blue-500" /> Categories &amp; Identity</h4>
+        <div className="bg-[#111] border border-white/5 border border-white/10 rounded-2xl p-5">
+            <h4 className="font-bold text-gray-300 mb-4 flex items-center gap-2"><Tag className="w-4 h-4 text-cyan-400" /> Categories &amp; Identity</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Cuisine</p>
-                    <div className="flex flex-wrap gap-1">{identity.categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-blue-50 text-blue-700" />)}</div>
+                    <div className="flex flex-wrap gap-1">{identity.categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-cyan-500/10 text-cyan-300" />)}</div>
                 </div>
                 <div>
                     <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Specialties</p>
@@ -309,27 +309,27 @@ const ReviewPanel: React.FC<ReviewProps> = ({ basic, identity, branches }) => (
                 </div>
                 <div>
                     <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Keywords</p>
-                    <div className="flex flex-wrap gap-1">{identity.keywords.map((t, i) => <TagBadge key={i} tag={t} color="bg-gray-100 text-gray-700" />)}</div>
+                    <div className="flex flex-wrap gap-1">{identity.keywords.map((t, i) => <TagBadge key={i} tag={t} color="bg-white/5 text-gray-300" />)}</div>
                 </div>
                 <div>
                     <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Food Categories</p>
-                    <div className="flex flex-wrap gap-1">{identity.food_categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-green-50 text-green-700" />)}</div>
+                    <div className="flex flex-wrap gap-1">{identity.food_categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-green-500/10 text-green-400" />)}</div>
                 </div>
             </div>
         </div>
 
         {/* Branches */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><GitBranch className="w-4 h-4 text-blue-500" /> {branches.length} Branch{branches.length !== 1 ? 'es' : ''}</h4>
+        <div className="bg-[#111] border border-white/5 border border-white/10 rounded-2xl p-5">
+            <h4 className="font-bold text-gray-300 mb-4 flex items-center gap-2"><GitBranch className="w-4 h-4 text-cyan-400" /> {branches.length} Branch{branches.length !== 1 ? 'es' : ''}</h4>
             <div className="space-y-3">
                 {branches.map((b, i) => (
-                    <div key={i} className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                        <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
+                    <div key={i} className="flex items-start gap-3 p-4 bg-[#050505] rounded-xl border border-white/10">
+                        <div className="w-7 h-7 rounded-full bg-cyan-500 text-gray-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
                         <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900 text-sm">{b.area}, {b.city}</p>
+                            <p className="font-semibold text-white text-sm">{b.area}, {b.city}</p>
                             <p className="text-xs text-gray-500 mt-0.5 truncate">{b.address}</p>
                             {b.phone && <p className="text-xs text-gray-500 mt-0.5">📞 {b.phone}</p>}
-                            {b.lat && b.lng && <p className="text-xs text-green-600 mt-0.5">📍 {b.lat.toFixed(5)}, {b.lng.toFixed(5)}</p>}
+                            {b.lat && b.lng && <p className="text-xs text-green-500 mt-0.5">📍 {b.lat.toFixed(5)}, {b.lng.toFixed(5)}</p>}
                         </div>
                     </div>
                 ))}
@@ -527,9 +527,9 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
 
     /* ─────── Render ─────── */
     return (
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="bg-[#111] border border-white/5 rounded-2xl shadow-2xl overflow-hidden">
             {/* Progress header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-8 py-6">
+            <div className="bg-gradient-to-r from-cyan-600 to-indigo-600 px-8 py-6">
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-2xl font-bold text-white">Setup Your Restaurant</h2>
@@ -537,7 +537,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                     </div>
                     <button
                         onClick={onCancel}
-                        className="text-blue-200 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10"
+                        className="text-blue-200 hover:text-white transition-colors p-2 rounded-lg hover:bg-[#111] border border-white/5/10"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -552,14 +552,14 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                         return (
                             <React.Fragment key={s.id}>
                                 <div className="flex flex-col items-center">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${done ? 'bg-green-400 text-white' : active ? 'bg-white text-blue-700 shadow-lg scale-110' : 'bg-white/20 text-white/70'
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${done ? 'bg-green-400 text-white' : active ? 'bg-[#111] border border-white/5 text-cyan-300 shadow-lg scale-110' : 'bg-[#111] border border-white/5/20 text-white/70'
                                         }`}>
                                         {done ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
                                     </div>
                                     <span className={`text-xs mt-1 font-medium hidden sm:block ${active ? 'text-white' : 'text-white/60'}`}>{s.label}</span>
                                 </div>
                                 {idx < STEPS.length - 1 && (
-                                    <div className={`flex-1 h-0.5 mx-1 mb-5 rounded-full transition-all ${done ? 'bg-green-400' : 'bg-white/20'}`} />
+                                    <div className={`flex-1 h-0.5 mx-1 mb-5 rounded-full transition-all ${done ? 'bg-green-400' : 'bg-[#111] border border-white/5/20'}`} />
                                 )}
                             </React.Fragment>
                         );
@@ -570,7 +570,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
             {/* Body */}
             <div className="p-8">
                 {error && (
-                    <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                    <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-200 rounded-xl text-red-400 text-sm">
                         <X className="w-4 h-4 flex-shrink-0" />
                         {error}
                     </div>
@@ -580,36 +580,36 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                 {step === 1 && (
                     <div className="space-y-5 animate-fadeIn">
                         <div className="mb-2">
-                            <h3 className="text-lg font-bold text-gray-900">Basic Information</h3>
+                            <h3 className="text-lg font-bold text-white">Basic Information</h3>
                             <p className="text-sm text-gray-500">Tell us the core details about your restaurant.</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Restaurant Name <span className="text-red-500">*</span></label>
+                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Restaurant Name <span className="text-red-500">*</span></label>
                                 <input
                                     type="text"
                                     value={basic.name}
                                     onChange={(e) => setBasic({ ...basic, name: e.target.value })}
                                     placeholder="e.g., The Spice Garden"
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Country <span className="text-red-500">*</span></label>
+                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Country <span className="text-red-500">*</span></label>
                                 <input
                                     type="text"
                                     value={basic.country}
                                     onChange={(e) => setBasic({ ...basic, country: e.target.value })}
                                     placeholder="e.g., Pakistan"
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Price Range <span className="text-red-500">*</span></label>
+                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Price Range <span className="text-red-500">*</span></label>
                                 <select
                                     value={basic.price_range}
                                     onChange={(e) => setBasic({ ...basic, price_range: e.target.value as any })}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors bg-white"
+                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
                                 >
                                     <option value="budget">💰 Budget</option>
                                     <option value="mid-range">💰💰 Mid-Range</option>
@@ -617,7 +617,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Founded Year</label>
+                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Founded Year</label>
                                 <input
                                     type="number"
                                     value={basic.founded_year}
@@ -625,7 +625,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                                     placeholder="e.g., 2018"
                                     min="1900"
                                     max={new Date().getFullYear()}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
                                 />
                             </div>
                         </div>
@@ -642,7 +642,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                 {step === 2 && (
                     <div className="space-y-5 animate-fadeIn">
                         <div className="mb-2">
-                            <h3 className="text-lg font-bold text-gray-900">Restaurant Identity</h3>
+                            <h3 className="text-lg font-bold text-white">Restaurant Identity</h3>
                             <p className="text-sm text-gray-500">Help customers discover you. Type and press Enter to add each tag.</p>
                         </div>
                         <TagInput
@@ -650,7 +650,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                             tags={identity.categories}
                             onChange={(tags) => setIdentity({ ...identity, categories: tags })}
                             placeholder="Italian, Pizza, Fast Food…"
-                            color="bg-blue-100 text-blue-800"
+                            color="bg-cyan-500/20 text-blue-800"
                         />
                         <TagInput
                             label="Specialties"
@@ -664,14 +664,14 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                             tags={identity.keywords}
                             onChange={(tags) => setIdentity({ ...identity, keywords: tags })}
                             placeholder="family-friendly, outdoor seating…"
-                            color="bg-gray-200 text-gray-700"
+                            color="bg-white/10 text-gray-300"
                         />
                         <TagInput
                             label="Food Categories"
                             tags={identity.food_categories}
                             onChange={(tags) => setIdentity({ ...identity, food_categories: tags })}
                             placeholder="Main Course, Appetizers, Desserts…"
-                            color="bg-green-100 text-green-800"
+                            color="bg-green-500/20 text-green-400"
                         />
                     </div>
                 )}
@@ -681,13 +681,13 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                     <div className="animate-fadeIn">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">Branches &amp; Locations</h3>
+                                <h3 className="text-lg font-bold text-white">Branches &amp; Locations</h3>
                                 <p className="text-sm text-gray-500">Add as many branches as you have. At least one is required.</p>
                             </div>
                             <button
                                 type="button"
                                 onClick={addBranch}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-semibold shadow"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-gray-900 text-white rounded-xl hover:bg-cyan-400 transition-colors text-sm font-semibold shadow"
                             >
                                 <Plus className="w-4 h-4" />
                                 Add Branch
@@ -712,14 +712,14 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                     <div className="animate-fadeIn">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">Review &amp; Export</h3>
+                                <h3 className="text-lg font-bold text-white">Review &amp; Export</h3>
                                 <p className="text-sm text-gray-500">Everything looks good? Download your profile or go live.</p>
                             </div>
                             <div className="flex gap-2">
                                 <button
                                     type="button"
                                     onClick={handleExportJSON}
-                                    className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors text-sm font-medium border border-gray-200"
+                                    className="flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-xl hover:bg-white/10 transition-colors text-sm font-medium border border-white/10"
                                 >
                                     <FileJson className="w-4 h-4" />
                                     JSON
@@ -727,7 +727,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                                 <button
                                     type="button"
                                     onClick={handleExportPDF}
-                                    className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 rounded-xl hover:bg-red-100 transition-colors text-sm font-medium border border-red-200"
+                                    className="flex items-center gap-2 px-3 py-2 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors text-sm font-medium border border-red-200"
                                 >
                                     <Download className="w-4 h-4" />
                                     PDF
@@ -741,13 +741,13 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
 
                         {/* RAG Status Banner */}
                         {ragStatus === 'uploading' && (
-                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 text-sm">
+                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-cyan-300 text-sm">
                                 <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
                                 Uploading restaurant profile to AI knowledge base&hellip;
                             </div>
                         )}
                         {ragStatus === 'success' && (
-                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm">
+                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-green-500/10 border border-green-200 rounded-xl text-green-400 text-sm">
                                 <Check className="w-4 h-4 flex-shrink-0" />
                                 ✅ AI knowledge base updated &mdash; <strong>{ragChunks} chunks</strong> stored. The chatbot can now answer questions about this restaurant.
                             </div>
@@ -767,11 +767,11 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                 )}
 
                 {/* Navigation */}
-                <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
+                <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
                     <button
                         type="button"
                         onClick={step === 1 ? onCancel : back}
-                        className="flex items-center gap-2 px-5 py-2.5 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                        className="flex items-center gap-2 px-5 py-2.5 border-2 border-white/10 text-gray-300 rounded-xl hover:bg-[#050505] transition-colors font-medium"
                     >
                         <ChevronLeft className="w-4 h-4" />
                         {step === 1 ? 'Cancel' : 'Back'}
@@ -781,7 +781,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                         <button
                             type="button"
                             onClick={next}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-md"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-cyan-500 text-gray-900 text-white rounded-xl hover:bg-cyan-400 transition-colors font-semibold shadow-md"
                         >
                             Next
                             <ChevronRight className="w-4 h-4" />
@@ -791,7 +791,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                             type="button"
                             onClick={handleSubmit}
                             disabled={submitting}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-500 text-white rounded-xl hover:from-blue-700 hover:to-indigo-600 transition-all font-semibold shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             {submitting ? (
                                 <>

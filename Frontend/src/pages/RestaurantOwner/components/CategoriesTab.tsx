@@ -23,7 +23,11 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({ restaurantId }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | undefined>();
 
+  const hasLoaded = React.useRef(false);
+
   useEffect(() => {
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
     loadCategories();
   }, [restaurantId]);
 
@@ -74,7 +78,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({ restaurantId }) => {
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading categories...</p>
+        <p className="text-gray-400">Loading categories...</p>
       </div>
     );
   }
@@ -84,11 +88,11 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({ restaurantId }) => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h3 className="text-xl font-semibold">Menu Categories</h3>
-          <p className="text-sm text-gray-600 mt-1">Organize your menu items into categories</p>
+          <p className="text-sm text-gray-400 mt-1">Organize your menu items into categories</p>
         </div>
         <button
           onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400"
         >
           <Plus className="w-4 h-4" />
           Add Category
@@ -96,18 +100,18 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({ restaurantId }) => {
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-200 rounded-lg text-red-400">
           {error}
         </div>
       )}
 
       {categories.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-8 text-center">
           <Folder className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 mb-4">No categories yet. Create your first category to organize your menu.</p>
+          <p className="text-gray-400 mb-4">No categories yet. Create your first category to organize your menu.</p>
           <button
             onClick={handleCreate}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400"
           >
             Create Category
           </button>
@@ -115,29 +119,29 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({ restaurantId }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {categories.map((category) => (
-            <div key={category.category_id} className="bg-white rounded-lg shadow p-4">
+            <div key={category.category_id} className="bg-[#111] border border-white/5 rounded-lg shadow p-4">
               <div className="flex justify-between items-start mb-2">
                 <h4 className="font-semibold text-lg">{category.name}</h4>
                 <span className={`px-2 py-1 text-xs rounded-full ${
-                  category.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  category.is_active ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-gray-200'
                 }`}>
                   {category.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
               {category.description && (
-                <p className="text-sm text-gray-600 mb-3">{category.description}</p>
+                <p className="text-sm text-gray-400 mb-3">{category.description}</p>
               )}
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={() => handleEdit(category)}
-                  className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center justify-center gap-2 text-sm"
+                  className="flex-1 px-3 py-2 bg-cyan-500/10 text-cyan-400 rounded-lg hover:bg-cyan-500/20 flex items-center justify-center gap-2 text-sm"
                 >
                   <Edit className="w-4 h-4" />
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(category.category_id)}
-                  className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex items-center justify-center gap-2 text-sm"
+                  className="px-3 py-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 flex items-center justify-center gap-2 text-sm"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

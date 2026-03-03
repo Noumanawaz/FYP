@@ -78,39 +78,39 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#111] border border-white/5 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">{category ? 'Edit Category' : 'Create Category'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-400">
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-200 rounded-lg text-red-400 text-sm">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category Name *</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Category Name *</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
               placeholder="e.g., Appetizers, Main Course, Desserts"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Parent Category (Optional)</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Parent Category (Optional)</label>
             <select
               value={formData.parent_category_id}
               onChange={(e) => setFormData({ ...formData, parent_category_id: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
             >
               <option value="">None (Root Category)</option>
               {categories.map((cat) => (
@@ -122,12 +122,12 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
               placeholder="Brief description of this category..."
             />
           </div>
@@ -147,9 +147,9 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
               id="is_active"
               checked={formData.is_active}
               onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-cyan-400 border-[rgba(255,255,255,0.2)] rounded focus:ring-cyan-500/50"
             />
-            <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
+            <label htmlFor="is_active" className="ml-2 text-sm text-gray-300">
               Active (visible to customers)
             </label>
           </div>
@@ -158,14 +158,14 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg hover:bg-[#050505]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
               {loading ? 'Saving...' : category ? 'Update' : 'Create'}
