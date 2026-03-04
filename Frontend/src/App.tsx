@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard/Dashboard";
 import Login from "./pages/Login/Login";
 import Signup from "./pages/Signup/Signup";
 import RestaurantOwnerDashboard from "./pages/RestaurantOwner/RestaurantOwnerDashboard";
+import BranchDashboard from "./pages/BranchOwner/BranchDashboard";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
 import Checkout from "./pages/Checkout/Checkout";
@@ -46,6 +47,14 @@ function App() {
               element={
                 <ProtectedRoute requiredRole="restaurant_owner">
                   <RestaurantOwnerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="branch-owner"
+              element={
+                <ProtectedRoute requiredRole="branch_user">
+                  <BranchDashboard />
                 </ProtectedRoute>
               }
             />

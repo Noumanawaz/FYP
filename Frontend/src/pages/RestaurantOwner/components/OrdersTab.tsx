@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiService } from '../../../services/api';
 import { ClipboardList, Filter, Clock, MapPin, User, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
+import { useApp } from '../../../contexts/AppContext';
 
 interface OrderItem {
   item_id: string;
@@ -56,6 +57,9 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
   // Filtering
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  
+  const { state } = useApp();
+  const isBranchUser = state.user?.role === 'branch_user';
   
   // Status update tracking
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -199,6 +203,7 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
           <span className="text-sm font-medium text-gray-300">Filters:</span>
         </div>
         
+        {!isBranchUser && (
         <div>
           <label className="sr-only">Branch</label>
           <select
@@ -215,6 +220,7 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
             ))}
           </select>
         </div>
+        )}
 
         <div>
            <label className="sr-only">Status</label>

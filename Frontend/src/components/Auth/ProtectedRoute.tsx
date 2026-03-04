@@ -5,7 +5,7 @@ import { apiService } from '../../services/api';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'restaurant_owner' | 'customer';
+  requiredRole?: 'admin' | 'restaurant_owner' | 'branch_user' | 'customer';
   redirectTo?: string;
 }
 
@@ -59,6 +59,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
               navigate('/admin');
             } else if (user.role === 'restaurant_owner') {
               navigate('/restaurant-owner');
+            } else if (user.role === 'branch_user') {
+              navigate('/branch-owner');
             } else {
               navigate('/dashboard');
             }
@@ -90,6 +92,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
                   navigate('/admin');
                 } else if (tokenRole === 'restaurant_owner') {
                   navigate('/restaurant-owner');
+                } else if (tokenRole === 'branch_user') {
+                  navigate('/branch-owner');
                 } else {
                   navigate('/dashboard');
                 }
@@ -185,6 +189,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
               navigate('/admin');
             } else if (userRole === 'restaurant_owner') {
               navigate('/restaurant-owner');
+            } else if (userRole === 'branch_user') {
+              navigate('/branch-owner');
             } else {
               navigate('/dashboard');
             }

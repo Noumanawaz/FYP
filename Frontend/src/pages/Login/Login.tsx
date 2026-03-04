@@ -81,7 +81,7 @@ const Login: React.FC = () => {
                                 email: userResponse.data.email || "",
                                 phone: userResponse.data.phone || "",
                                 name: userResponse.data.name,
-                                role: userRole as 'customer' | 'restaurant_owner' | 'admin',
+                                role: userRole as 'customer' | 'restaurant_owner' | 'branch_user' | 'admin',
                                 isVerified: true,
                                 addresses: backendAddresses,
                                 paymentMethods: [],
@@ -94,6 +94,8 @@ const Login: React.FC = () => {
                             navigate("/admin");
                         } else if (userRole === 'restaurant_owner') {
                             navigate("/restaurant-owner");
+                        } else if (userRole === 'branch_user') {
+                            navigate("/branch-owner");
                         } else {
                             navigate("/dashboard");
                         }
@@ -106,7 +108,7 @@ const Login: React.FC = () => {
                                 email: response.data.user.email || "",
                                 phone: response.data.user.phone || "",
                                 name: response.data.user.name,
-                                role: response.data.user.role as 'customer' | 'restaurant_owner' | 'admin',
+                                role: response.data.user.role as 'customer' | 'restaurant_owner' | 'branch_user' | 'admin',
                                 isVerified: true,
                                 addresses: [],
                                 paymentMethods: [],
@@ -118,6 +120,8 @@ const Login: React.FC = () => {
                             navigate("/admin");
                         } else if (response.data.user.role === 'restaurant_owner') {
                             navigate("/restaurant-owner");
+                        } else if (response.data.user.role === 'branch_user') {
+                            navigate("/branch-owner");
                         } else {
                             navigate("/dashboard");
                         }
@@ -131,7 +135,7 @@ const Login: React.FC = () => {
                             email: response.data.user.email || "",
                             phone: response.data.user.phone || "",
                             name: response.data.user.name,
-                            role: response.data.user.role as 'customer' | 'restaurant_owner' | 'admin',
+                            role: response.data.user.role as 'customer' | 'restaurant_owner' | 'branch_user' | 'admin',
                             isVerified: true,
                             addresses: [],
                             paymentMethods: [],
@@ -143,6 +147,8 @@ const Login: React.FC = () => {
                         navigate("/admin");
                     } else if (response.data.user.role === 'restaurant_owner') {
                         navigate("/restaurant-owner");
+                    } else if (response.data.user.role === 'branch_user') {
+                        navigate("/branch-owner");
                     } else {
                         navigate("/dashboard");
                     }

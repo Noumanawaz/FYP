@@ -4,7 +4,7 @@ export interface User {
   email: string;
   name: string;
   phone: string;
-  role: 'customer' | 'restaurant_owner' | 'admin';
+  role: 'customer' | 'restaurant_owner' | 'branch_user' | 'admin';
   avatar?: string;
   isVerified: boolean;
   addresses: Address[];

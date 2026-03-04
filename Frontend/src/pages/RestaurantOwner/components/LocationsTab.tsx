@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, MapPin, Phone, Check } from 'lucide-react';
+import { Plus, Edit, Trash2, MapPin, Phone, Check, UserPlus } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import { geoapifyService } from '../../../services/geoapifyService';
 import MapAddressSelector from '../../../components/Location/MapAddressSelector';
@@ -30,6 +30,11 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
   const [editingLocation, setEditingLocation] = useState<Location | undefined>();
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [mapOpen, setMapOpen] = useState(false);
+
+  // Branch User Form State
+  const [showBranchUserForm, setShowBranchUserForm] = useState(false);
+  const [targetLocation, setTargetLocation] = useState<Location | undefined>();
+  const [branchUserData, setBranchUserData] = useState({ name: '', email: '', phone: '', password: '' });
 
   const hasLoaded = React.useRef(false);
 
@@ -146,6 +151,31 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
       alert('Delete location — please contact admin to remove locations for now.');
     } catch (err: any) {
       alert(err.message || 'Failed to delete location');
+    }
+  };
+
+  const handleCreateBranchUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetLocation) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (!branchUserData.email && !branchUserData.phone) {
+         throw new Error('Please provide either an email or a phone number.');
+      }
+      await apiService.createBranchUser({
+        ...branchUserData,
+        restaurant_id: restaurantId,
+        location_id: targetLocation.location_id
+      });
+      setShowBranchUserForm(false);
+      setTargetLocation(undefined);
+      setBranchUserData({ name: '', email: '', phone: '', password: '' });
+      alert('Branch user created successfully!');
+    } catch (err: any) {
+      setError(err.message || 'Failed to create branch user');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -334,6 +364,16 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
+                <button
+                  onClick={() => {
+                    setTargetLocation(location);
+                    setShowBranchUserForm(true);
+                  }}
+                  className="px-3 py-2 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 flex items-center justify-center text-sm"
+                  title="Create Branch Account"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </button>
               </div>
             </div>
           ))}
@@ -352,6 +392,75 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
         }
         title="Select Branch Location"
       />
+
+      {/* Create Branch User Modal */}
+      {showBranchUserForm && targetLocation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#111] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <h4 className="text-xl font-bold mb-2">Create Branch Account</h4>
+            <p className="text-sm text-gray-400 mb-6">Create an account for the manager of {targetLocation.area}, {targetLocation.city} branch.</p>
+            <form onSubmit={handleCreateBranchUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={branchUserData.name}
+                  onChange={(e) => setBranchUserData({ ...branchUserData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={branchUserData.email}
+                    onChange={(e) => setBranchUserData({ ...branchUserData, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={branchUserData.phone}
+                    onChange={(e) => setBranchUserData({ ...branchUserData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Password *</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={branchUserData.password}
+                  onChange={(e) => setBranchUserData({ ...branchUserData, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
+                />
+              </div>
+              <div className="flex gap-4 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowBranchUserForm(false)}
+                  className="flex-1 px-4 py-2 border border-white/20 rounded-lg hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-cyan-500 text-gray-900 rounded-lg hover:bg-cyan-400 font-bold disabled:opacity-50"
+                >
+                  {loading ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -296,6 +296,27 @@ export class ApiService {
     });
   }
 
+  async createBranchUser(userData: {
+    name: string;
+    email?: string;
+    phone?: string;
+    password?: string;
+    restaurant_id: string;
+    location_id: string;
+    preferred_language?: "en" | "ur";
+  }) {
+    return this.request<{
+      user_id: string;
+      name: string;
+      email?: string;
+      phone?: string;
+      role: string;
+    }>("/users/branch", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    });
+  }
+
   async getAllUsers(params?: { page?: number; limit?: number }) {
     const queryParams = new URLSearchParams();
     if (params) {
