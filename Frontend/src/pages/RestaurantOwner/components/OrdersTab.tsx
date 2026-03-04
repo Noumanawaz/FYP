@@ -105,8 +105,14 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
         let orderList = Array.isArray(response.data) ? response.data : 
                           (response.data.items || response.data.orders || []);
         
-        // Handle MongoDB wrapping vs Postgres flat structure
-        orderList = orderList.map((o: any) => o.order_data ? o.order_data : o);
+        // Handle MongoDB wrapping vs Postgres flat structure, and map order_status to status
+        orderList = orderList.map((o: any) => {
+          const baseOrder = o.order_data ? o.order_data : o;
+          return {
+            ...baseOrder,
+            status: baseOrder.order_status || baseOrder.status // Postgres uses order_status 
+          };
+        });
         
         // Sort newest first
         const sorted = [...orderList].sort((a, b) => 
