@@ -242,15 +242,29 @@ export class OrderModel {
     return result[0] as OrderItem;
   }
 
-  static async updateStatus(orderId: string, status: Order["order_status"]): Promise<Order | null> {
-    const result = await sql`
-      UPDATE orders
-      SET order_status = ${status},
-          updated_at = NOW(),
-          completed_at = ${status === "delivered" || status === "cancelled" ? sql`NOW()` : sql`completed_at`}
-      WHERE order_id = ${orderId}
-      RETURNING *
-    `;
+  static async updateStatus(orderId: string, status: string): Promise<Order | null> {
+    const terminalStatuses = ['delivered', 'cancelled', 'completed'];
+    const isTerminal = terminalStatuses.includes(status);
+
+    let result;
+    if (isTerminal) {
+      result = await sql`
+        UPDATE orders
+        SET order_status = ${status},
+            updated_at = NOW(),
+            completed_at = NOW()
+        WHERE order_id = ${orderId}
+        RETURNING *
+      `;
+    } else {
+      result = await sql`
+        UPDATE orders
+        SET order_status = ${status},
+            updated_at = NOW()
+        WHERE order_id = ${orderId}
+        RETURNING *
+      `;
+    }
     return (result[0] as Order) || null;
   }
 

@@ -50,7 +50,7 @@ export class OrderService {
     return result;
   }
 
-  static async updateOrderStatus(orderId: string, status: Order["order_status"], changedBy?: string) {
+  static async updateOrderStatus(orderId: string, status: string, changedBy?: string) {
     const order = await OrderModel.updateStatus(orderId, status);
     if (!order) {
       throw new AppError("Order not found", 404);
@@ -80,7 +80,19 @@ export class OrderService {
 
   static async getOrderHistory(userId: string, pagination?: { page?: number; limit?: number }) {
     if (!isMongoDBConnected()) {
-      throw new AppError("MongoDB not available. Order history requires MongoDB connection.", 503);
+      logger.warn("MongoDB not available. Falling back to PostgreSQL for getOrderHistory.");
+      const result = await OrderModel.findAll({ user_id: userId }, pagination);
+      const page = pagination?.page || 1;
+      const limit = pagination?.limit || 20;
+      return {
+        orders: result.orders,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          totalPages: Math.ceil(result.total / limit),
+        },
+      };
     }
 
     const page = pagination?.page || 1;
@@ -102,27 +114,21 @@ export class OrderService {
 
   static async getRestaurantOrderHistory(restaurantId: string, pagination?: { page?: number; limit?: number }) {
     if (!isMongoDBConnected()) {
-      throw new AppError("MongoDB not available. Order history requires MongoDB connection.", 503);
+      logger.warn("MongoDB not available. Falling back to PostgreSQL for getRestaurantOrderHistory.");
+      const result = await OrderModel.findAll({ restaurant_id: restaurantId }, pagination);
+      const page = pagination?.page || 1;
+      const limit = pagination?.limit || 20;
+      return {
+        orders: result.orders,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          totalPages: Math.ceil(result.total / limit),
+        },
+      };
     }
 
-    const page = pagination?.page || 1;
-    const limit = pagination?.limit || 20;
-    const skip = (page - 1) * limit;
-
-    const [orders, total] = await Promise.all([OrderHistoryModel.find({ restaurant_id: restaurantId }).sort({ created_at: -1 }).skip(skip).limit(limit).lean(), OrderHistoryModel.countDocuments({ restaurant_id: restaurantId })]);
-
-    return {
-      orders,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  static async getRestaurantOrderHistory(restaurantId: string, pagination?: { page?: number; limit?: number }) {
     const page = pagination?.page || 1;
     const limit = pagination?.limit || 20;
     const skip = (page - 1) * limit;
