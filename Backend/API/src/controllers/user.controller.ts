@@ -64,6 +64,42 @@ export class UserController {
     }
   }
 
+  static async createBranchUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const authReq = req as AuthRequest;
+      const { restaurant_id } = req.body;
+      
+      // If the creator is a restaurant owner, ensure they own this restaurant
+      if (authReq.user?.role === "restaurant_owner") {
+        const { RestaurantModel } = await import("@/models/postgres/restaurants.model");
+        const restaurant = await RestaurantModel.findById(restaurant_id);
+        if (!restaurant || restaurant.owner_id !== authReq.user.user_id) {
+          const response: ApiResponse = {
+            success: false,
+            error: "You can only create branch users for your own restaurant",
+          };
+          return res.status(403).json(response);
+        }
+      }
+
+      const branchUserData = {
+        ...req.body,
+        role: "branch_user",
+        preferred_language: req.body.preferred_language || "en"
+      };
+
+      const user = await UserService.createUser(branchUserData);
+      const response: ApiResponse = {
+        success: true,
+        data: user,
+        message: "Branch user created successfully",
+      };
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const authReq = req as AuthRequest;

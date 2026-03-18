@@ -173,7 +173,9 @@ export interface User {
   email: string | null;
   phone: string | null;
   name: string;
-  role: "customer" | "restaurant_owner" | "admin";
+  role: "customer" | "restaurant_owner" | "branch_user" | "admin";
+  restaurant_id?: string | null;
+  location_id?: string | null;
   preferred_language: "en" | "ur";
   favorite_restaurants: string[];
   dietary_preferences: string[];
@@ -187,7 +189,9 @@ export interface CreateUserDto {
   phone?: string | null;
   name: string;
   password?: string; // Plain password from request
-  role?: "customer" | "restaurant_owner" | "admin";
+  role?: "customer" | "restaurant_owner" | "branch_user" | "admin";
+  restaurant_id?: string | null;
+  location_id?: string | null;
   preferred_language: "en" | "ur";
   favorite_restaurants?: string[];
   dietary_preferences?: string[];
@@ -198,6 +202,9 @@ export interface UpdateUserDto {
   email?: string | null;
   phone?: string | null;
   name?: string;
+  role?: "customer" | "restaurant_owner" | "branch_user" | "admin";
+  restaurant_id?: string | null;
+  location_id?: string | null;
   preferred_language?: "en" | "ur";
   favorite_restaurants?: string[];
   dietary_preferences?: string[];

@@ -75,8 +75,16 @@ export class OrderController {
 
   static async getRestaurantOrderHistory(req: Request, res: Response, next: NextFunction) {
     try {
+      const authReq = req as AuthRequest;
       const { restaurantId } = req.params;
-      const result = await OrderService.getRestaurantOrderHistory(restaurantId, req.query as any);
+      
+      let locationId: string | undefined;
+      // If user is a branch_user, strictly limit to their location
+      if (authReq.user?.role === "branch_user" && authReq.user?.location_id) {
+        locationId = authReq.user.location_id;
+      }
+      
+      const result = await OrderService.getRestaurantOrderHistory(restaurantId, req.query as any, locationId);
       const response: ApiResponse = {
         success: true,
         data: result,

@@ -85,33 +85,30 @@ class VectorDBBuilder:
                         if layout_text and len(layout_text) > len(page_text):
                             page_text = layout_text
                     
-                    # Clean up null bytes and special characters that might hide prices
-                    # Replace null bytes and unicode issues with spaces
-                    import re
-                    page_text = re.sub(r'\x00+', ' ', page_text)  # Replace null bytes
-                    page_text = re.sub(r'\s+', ' ', page_text)  # Normalize whitespace
-                    
-                    # Try to extract from words (sometimes prices are in word objects)
-                    try:
-                        words = page.extract_words()
-                        if words:
-                            # Look for price patterns in words
-                            price_words = []
-                            for word in words:
-                                word_text = word.get('text', '')
-                                # Check if word looks like a price
-                                if re.match(r'^\d+[,\d]*$', word_text):
-                                    # Check if previous word was "Rs." or similar
-                                    price_words.append(word_text)
-                            
-                            # If we found price numbers, try to match them with "Rs." in text
-                            if price_words:
-                                # Try to reconstruct price information
-                                pass  # For now, just note that prices exist
-                    except:
-                        pass
-                    
+                    # Clean up common PDF extraction artifacts
                     if page_text:
+                        # 1. Remove (cid:n) patterns (common PDF encoding error)
+                        page_text = re.sub(r'\(cid:\d+\)', '', page_text)
+                        
+                        # 2. Fix "s p a c e d" out text (e.g., "M e n u" -> "Menu")
+                        # If a string has spaces between every character, collapse it
+                        def fix_spaced_text(match):
+                            text = match.group(0)
+                            if len(text) > 4 and " " in text:
+                                # Check if it's mostly single characters separated by spaces
+                                parts = text.split()
+                                if all(len(p) == 1 for p in parts if p):
+                                    return "".join(parts)
+                            return text
+                        
+                        page_text = re.sub(r'([A-Za-z]\s){3,}[A-Za-z]', fix_spaced_text, page_text)
+
+                        # 3. Clean up null bytes and special characters
+                        page_text = re.sub(r'\x00+', ' ', page_text)
+                        
+                        # 4. Normalize spacing (but keep newlines for section separation)
+                        page_text = re.sub(r'[ \t]+', ' ', page_text)
+                        
                         text_content.append(f"Page {page_num}:\n{page_text}\n")
             
             full_text = "\n".join(text_content)
@@ -120,6 +117,17 @@ class VectorDBBuilder:
         
         except Exception as e:
             print(f"❌ Error extracting text from {pdf_path}: {e}")
+            return ""
+
+    def extract_text_from_txt(self, txt_path: str) -> str:
+        """Simply read a plain text file"""
+        try:
+            with open(txt_path, 'r', encoding='utf-8') as f:
+                text = f.read()
+            print(f"✅ Extracted {len(text)} characters from {os.path.basename(txt_path)}")
+            return text
+        except Exception as e:
+            print(f"❌ Error reading text file {txt_path}: {e}")
             return ""
     
     def chunk_text(self, text: str, chunk_size: int = 500, chunk_overlap: int = 100) -> List[str]:
@@ -131,9 +139,9 @@ class VectorDBBuilder:
             return []
         
         chunks = []
-        # Target chunk size in characters (optimal for embeddings: 200-800 chars)
-        target_chunk_size = 600  # ~150 words, good for semantic search
-        overlap_size = 150  # ~30 words overlap for context preservation
+        # Increased chunk size for better menu item grouping
+        target_chunk_size = 1000  # Up from 600
+        overlap_size = 200        # Up from 150
         
         # Split by sentences first for better chunk boundaries
         # Handle multiple sentence endings
@@ -234,35 +242,43 @@ class VectorDBBuilder:
         # Load restaurant index
         restaurant_index = self.load_restaurant_index()
         
-        # Find all PDF files
-        pdf_files = list(Path(self.data_dir).glob("*.pdf"))
+        # Find all PDF and TXT files
+        files = list(Path(self.data_dir).glob("*.pdf")) + list(Path(self.data_dir).glob("*.txt"))
         
-        if not pdf_files:
-            print("❌ No PDF files found in data directory")
+        if not files:
+            print("❌ No PDF or TXT files found in data directory")
             return
         
-        print(f"📄 Found {len(pdf_files)} PDF file(s)\n")
+        print(f"📄 Found {len(files)} file(s) for ingestion\n")
         
         # Track processed files
         processed_count = 0
         total_chunks = 0
         
-        for pdf_path in pdf_files:
-            pdf_filename = pdf_path.name
-            print(f"📖 Processing: {pdf_filename}")
+        for file_path in files:
+            filename = file_path.name
+            print(f"📖 Processing: {filename}")
             
-            # Map PDF to restaurant
-            restaurant_info = self.map_pdf_to_restaurant(pdf_filename, restaurant_index)
+            # Map file to restaurant
+            restaurant_info = self.map_pdf_to_restaurant(filename, restaurant_index)
             
             if not restaurant_info:
-                print(f"⚠️  Could not map {pdf_filename} to a restaurant, skipping...")
-                continue
+                # If name match fails, try splitting the filename (e.g., "Cheezious_exported_dataset.txt")
+                base_name = filename.split('_')[0].split('.')[0].lower()
+                for rest in restaurant_index.get("restaurants", []):
+                    if rest['name'].lower() in base_name or base_name in rest['name'].lower():
+                        restaurant_info = rest
+                        break
+                
+                if not restaurant_info:
+                    print(f"⚠️  Could not map {filename} to a restaurant, skipping...")
+                    continue
             
             restaurant_id = restaurant_info.get("id", "unknown")
             restaurant_name = restaurant_info.get("name", "Unknown")
             
             # Check if we need to rebuild (by checking hash)
-            pdf_hash = self.get_pdf_hash(str(pdf_path))
+            file_hash = self.get_pdf_hash(str(file_path))
             
             # Query existing documents for this restaurant
             try:
@@ -270,7 +286,7 @@ class VectorDBBuilder:
                     where={"restaurant_id": restaurant_id}
                 )
                 
-                # Check if PDF has changed
+                # Check if file has changed
                 needs_update = force_rebuild
                 if existing_docs.get("ids") and len(existing_docs["ids"]) > 0:
                     # Check if hash matches
@@ -278,10 +294,10 @@ class VectorDBBuilder:
                     if existing_docs.get("metadatas"):
                         existing_hashes = [doc.get("hash", "") for doc in existing_docs["metadatas"]]
                     
-                    if pdf_hash not in existing_hashes:
+                    if file_hash not in existing_hashes:
                         needs_update = True
-                        print(f"🔄 PDF has changed, updating vector DB...")
-                        # Delete old documents
+                        print(f"🔄 File has changed, updating vector DB...")
+                        # Delete old documents in ChromaDB
                         self.restaurant_collection.delete(where={"restaurant_id": restaurant_id})
                 else:
                     needs_update = True
@@ -289,10 +305,9 @@ class VectorDBBuilder:
                 print(f"⚠️  Error checking existing documents: {e}")
                 needs_update = True
             
-            # Always force rebuild to ensure improved extraction runs
-            # (The extraction method was improved to handle prices better)
+            # Forcing rebuild for improved extraction
             if not needs_update and not force_rebuild:
-                print(f"🔄 Forcing rebuild for {restaurant_name} to use improved price extraction...")
+                print(f"🔄 Forcing rebuild for {restaurant_name} to use improved extraction...")
                 try:
                     self.restaurant_collection.delete(where={"restaurant_id": restaurant_id})
                     needs_update = True
@@ -304,11 +319,14 @@ class VectorDBBuilder:
                 print(f"✅ {restaurant_name} already up to date, skipping...\n")
                 continue
             
-            # Extract text from PDF
-            text = self.extract_text_from_pdf(str(pdf_path))
+            # Extract text
+            if filename.lower().endswith(".pdf"):
+                text = self.extract_text_from_pdf(str(file_path))
+            else:
+                text = self.extract_text_from_txt(str(file_path))
             
             if not text:
-                print(f"⚠️  No text extracted from {pdf_filename}, skipping...\n")
+                print(f"⚠️  No text extracted from {filename}, skipping...\n")
                 continue
             
             # Chunk the text
@@ -316,14 +334,28 @@ class VectorDBBuilder:
             print(f"📝 Created {len(chunks)} text chunks")
             
             if not chunks:
-                print(f"⚠️  No chunks created from {pdf_filename}, skipping...\n")
+                print(f"⚠️  No chunks created from {filename}, skipping...\n")
                 continue
             
             # Create embeddings
             print(f"🧮 Generating embeddings...")
             embeddings = self.embedding_model.encode(chunks, show_progress_bar=True)
             
-            # Prepare documents for ChromaDB
+            # ── Store in NeonDB (pgvector) ──────────────────────────────────────
+            import services.neon_vector_store as neon_store
+            try:
+                neon_count = neon_store.upsert_chunks(
+                    restaurant_id=restaurant_id,
+                    restaurant_name=restaurant_name,
+                    chunks=chunks,
+                    embeddings=embeddings,
+                    pdf_filename=filename
+                )
+                print(f"✅ Synced {neon_count} chunks to NeonDB (Cloud)")
+            except Exception as e:
+                print(f"⚠️  Failed to sync to NeonDB: {e}")
+
+            # Prepare documents for ChromaDB (Local Backup)
             ids = []
             documents = []
             metadatas = []
@@ -335,9 +367,9 @@ class VectorDBBuilder:
                 metadatas.append({
                     "restaurant_id": restaurant_id,
                     "restaurant_name": restaurant_name,
-                    "pdf_filename": pdf_filename,
+                    "pdf_filename": filename,
                     "chunk_index": i,
-                    "hash": pdf_hash,
+                    "hash": file_hash,
                     "type": restaurant_info.get("type", "menu")
                 })
             

@@ -4,7 +4,7 @@ import { UserModel } from "@/models/postgres/users.model";
 import { AppError } from "./error-handler";
 import { ApiResponse } from "@/types";
 
-export type UserRole = "customer" | "restaurant_owner" | "admin";
+export type UserRole = "customer" | "restaurant_owner" | "branch_user" | "admin";
 
 /**
  * Role-based access control middleware
@@ -45,6 +45,8 @@ export const requireRole = (...allowedRoles: UserRole[]) => {
       req.user = {
         ...req.user,
         role: user.role as UserRole,
+        restaurant_id: user.restaurant_id,
+        location_id: user.location_id,
       };
 
       next();
@@ -65,9 +67,14 @@ export const requireAdmin = requireRole("admin");
 export const requireRestaurantOwnerOrAdmin = requireRole("restaurant_owner", "admin");
 
 /**
- * Require customer, restaurant owner, or admin (any authenticated user)
+ * Require customer, restaurant owner, branch user, or admin (any authenticated user)
  */
-export const requireAnyRole = requireRole("customer", "restaurant_owner", "admin");
+export const requireAnyRole = requireRole("customer", "restaurant_owner", "branch_user", "admin");
+
+/**
+ * Require branch user, restaurant owner, or admin
+ */
+export const requireBranchOrRestaurantOwner = requireRole("branch_user", "restaurant_owner", "admin");
 
 /**
  * Check if user owns a restaurant
@@ -98,7 +105,7 @@ export const requireRestaurantOwnership = async (
 
     // Admins can access any restaurant
     if (user.role === "admin") {
-      req.user = { ...req.user, role: user.role as UserRole };
+      req.user = { ...req.user, role: user.role as UserRole, restaurant_id: user.restaurant_id, location_id: user.location_id };
       return next();
     }
 
@@ -134,7 +141,7 @@ export const requireRestaurantOwnership = async (
         return res.status(403).json(response);
       }
       
-      req.user = { ...req.user, role: user.role as UserRole };
+      req.user = { ...req.user, role: user.role as UserRole, restaurant_id: user.restaurant_id, location_id: user.location_id };
       return next();
     }
 
@@ -155,8 +162,9 @@ export const requireRestaurantOwnership = async (
 export const hasRole = (userRole: UserRole, requiredRole: UserRole): boolean => {
   const roleHierarchy: Record<UserRole, number> = {
     customer: 1,
-    restaurant_owner: 2,
-    admin: 3,
+    branch_user: 2,
+    restaurant_owner: 3,
+    admin: 4,
   };
 
   return roleHierarchy[userRole] >= roleHierarchy[requiredRole];

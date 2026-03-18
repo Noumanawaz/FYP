@@ -7,7 +7,9 @@ export interface AuthRequest extends Request {
     user_id: string;
     email?: string;
     phone?: string;
-    role?: "customer" | "restaurant_owner" | "admin";
+    role?: "customer" | "restaurant_owner" | "branch_user" | "admin";
+    restaurant_id?: string | null;
+    location_id?: string | null;
   };
 }
 

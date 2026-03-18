@@ -11,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 from .query_processor import QueryProcessor
 from .reranker import Reranker
 from .context_filter import ContextFilter
+from services import neon_vector_store
 
 # Minimum similarity threshold - using adaptive threshold based on results
 # We'll use top-K ranking with reranking instead of strict filtering
@@ -270,7 +271,7 @@ class MultiRestaurantRAGSystem:
         elif restaurant_ids:
             where_clause = None
         
-        # Semantic search - get more results than needed for reranking
+        # Semantic search using NeonDB (pgvector)
         # Increase search_k to ensure we find chunks with prices when user asks about prices
         query_lower = query.lower()
         if any(kw in query_lower for kw in ['price', 'prices', 'cost', 'how much', 'deal']):
@@ -279,66 +280,76 @@ class MultiRestaurantRAGSystem:
         else:
             search_k = min(top_k * 2, 15) if restaurant_ids and len(restaurant_ids) > 1 else min(top_k * 2, 10)
         
+        retrieved_chunks = []
         try:
-            results = self.restaurant_collection.query(
-                query_texts=[processed_query],
-                n_results=min(search_k, self.restaurant_collection.count()),
-                where=where_clause if where_clause else None
+            # Generate embedding for the query
+            query_embedding = self.embedding_model.encode(processed_query)
+            
+            # Determine target restaurant_id (if single)
+            target_rid = None
+            if restaurant_ids and len(restaurant_ids) == 1:
+                target_rid = restaurant_ids[0]
+            
+            db_results = neon_vector_store.search_similar(
+                query_embedding=query_embedding,
+                top_k=search_k,
+                restaurant_id=target_rid
             )
+            
+            if db_results:
+                print(f"📊 Found {len(db_results)} chunks from NeonDB semantic search")
+                for row in db_results:
+                    # Filter by restaurant_ids if multiple specified
+                    if restaurant_ids and len(restaurant_ids) > 1:
+                        if row["restaurant_id"] not in restaurant_ids:
+                            continue
+                    
+                    similarity = float(row["similarity"])
+                    
+                    # Only filter extremely poor matches
+                    if similarity < MIN_SIMILARITY_THRESHOLD:
+                        continue
+                    
+                    metadata = {
+                        "restaurant_id": row["restaurant_id"],
+                        "restaurant_name": row["restaurant_name"],
+                        "chunk_index": row["chunk_index"],
+                        "pdf_filename": row["pdf_filename"]
+                    }
+                    
+                    retrieved_chunks.append({
+                        "restaurant_id": row["restaurant_id"],
+                        "restaurant_name": row["restaurant_name"],
+                        "content": row["content"],
+                        "similarity": similarity,
+                        "metadata": metadata
+                    })
         except Exception as e:
             print(f"❌ Error in vector search: {e}")
+            import traceback
+            traceback.print_exc()
             return []
-        
-        # Process and convert distances to similarities
-        retrieved_chunks = []
-        if results.get("ids") and len(results["ids"][0]) > 0:
-            print(f"📊 Found {len(results['ids'][0])} chunks from semantic search")
             
-            for i, doc_id in enumerate(results["ids"][0]):
-                metadata = results["metadatas"][0][i] if results.get("metadatas") else {}
-                document = results["documents"][0][i] if results.get("documents") else ""
-                distance = results["distances"][0][i] if results.get("distances") else 10.0
-                
-                # Filter by restaurant_ids if multiple specified
-                if restaurant_ids and len(restaurant_ids) > 1:
-                    if metadata.get("restaurant_id") not in restaurant_ids:
-                        continue
-                
-                # Convert L2 distance to similarity (ChromaDB uses L2 by default)
-                similarity = self._l2_to_similarity(distance)
-                
-                # Only filter extremely poor matches
-                if similarity < MIN_SIMILARITY_THRESHOLD:
-                    continue
-                
-                retrieved_chunks.append({
-                    "restaurant_id": metadata.get("restaurant_id", "unknown"),
-                    "restaurant_name": metadata.get("restaurant_name", "Unknown"),
-                    "content": document,
-                    "similarity": similarity,
-                    "metadata": metadata
-                })
+        # Re-rank chunks using production-grade reranker
+        if retrieved_chunks:
+            print(f"🔄 Re-ranking {len(retrieved_chunks)} chunks...")
+            reranked_chunks = self.reranker.rerank(retrieved_chunks, query, query_terms)
             
-            # Re-rank chunks using production-grade reranker
-            if retrieved_chunks:
-                print(f"🔄 Re-ranking {len(retrieved_chunks)} chunks...")
-                reranked_chunks = self.reranker.rerank(retrieved_chunks, query, query_terms)
-                
-                # Update similarity with rerank score for final sorting
-                for chunk in reranked_chunks:
-                    # Combine semantic similarity (40%) with rerank score (60%)
-                    chunk['final_score'] = (chunk['similarity'] * 0.4) + (chunk['rerank_score'] * 0.6)
-                
-                # Sort by final score
-                reranked_chunks.sort(key=lambda x: x['final_score'], reverse=True)
-                
-                # Return top_k, but limit to 5 max for phone-call style (concise responses)
-                final_chunks = reranked_chunks[:min(top_k, 5)]
-                print(f"✅ Returning {len(final_chunks)} top-ranked chunks")
-                for i, chunk in enumerate(final_chunks[:3]):  # Log top 3
-                    print(f"  {i+1}. {chunk['restaurant_name']} (score: {chunk['final_score']:.3f}, similarity: {chunk['similarity']:.3f}, rerank: {chunk['rerank_score']:.3f})")
-                
-                return final_chunks
+            # Update similarity with rerank score for final sorting
+            for chunk in reranked_chunks:
+                # Combine semantic similarity (40%) with rerank score (60%)
+                chunk['final_score'] = (chunk['similarity'] * 0.4) + (chunk['rerank_score'] * 0.6)
+            
+            # Sort by final score
+            reranked_chunks.sort(key=lambda x: x['final_score'], reverse=True)
+            
+            # Return top_k, but limit to 5 max for phone-call style (concise responses)
+            final_chunks = reranked_chunks[:min(top_k, 5)]
+            print(f"✅ Returning {len(final_chunks)} top-ranked chunks")
+            for i, chunk in enumerate(final_chunks[:3]):  # Log top 3
+                print(f"  {i+1}. {chunk['restaurant_name']} (score: {chunk['final_score']:.3f}, similarity: {chunk['similarity']:.3f}, rerank: {chunk['rerank_score']:.3f})")
+            
+            return final_chunks
         
         return []
     

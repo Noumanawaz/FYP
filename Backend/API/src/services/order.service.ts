@@ -112,10 +112,14 @@ export class OrderService {
     };
   }
 
-  static async getRestaurantOrderHistory(restaurantId: string, pagination?: { page?: number; limit?: number }) {
+  static async getRestaurantOrderHistory(restaurantId: string, pagination?: { page?: number; limit?: number }, locationId?: string) {
     if (!isMongoDBConnected()) {
       logger.warn("MongoDB not available. Falling back to PostgreSQL for getRestaurantOrderHistory.");
-      const result = await OrderModel.findAll({ restaurant_id: restaurantId }, pagination);
+      
+      const filter: any = { restaurant_id: restaurantId };
+      if (locationId) filter.location_id = locationId;
+
+      const result = await OrderModel.findAll(filter, pagination);
       const page = pagination?.page || 1;
       const limit = pagination?.limit || 20;
       return {
@@ -133,7 +137,10 @@ export class OrderService {
     const limit = pagination?.limit || 20;
     const skip = (page - 1) * limit;
 
-    const [orders, total] = await Promise.all([OrderHistoryModel.find({ restaurant_id: restaurantId }).sort({ created_at: -1 }).skip(skip).limit(limit).lean(), OrderHistoryModel.countDocuments({ restaurant_id: restaurantId })]);
+    const query: any = { restaurant_id: restaurantId };
+    if (locationId) query.location_id = locationId;
+
+    const [orders, total] = await Promise.all([OrderHistoryModel.find(query).sort({ created_at: -1 }).skip(skip).limit(limit).lean(), OrderHistoryModel.countDocuments(query)]);
 
     return {
       orders,
