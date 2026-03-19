@@ -412,28 +412,52 @@ class MultiRestaurantRAGSystem:
                 location_info = {}
                 
                 for chunk in chunks:
-                    content = chunk["content"].lower()
-                    metadata = chunk.get("metadata", {})
+                    content = chunk["content"]
+                    meta_tag = chunk.get("meta_tag")
                     
-                    # Try to extract menu items, deals, etc. from content
-                    if any(word in content for word in ["price", "rs", "rupee", "cost"]):
-                        # Extract price information
-                        price_match = re.search(r'rs\.?\s*(\d+)', content, re.IGNORECASE)
-                        if price_match:
-                            menu_items.append({
-                                "name": metadata.get("chunk_index", "Item"),
-                                "price": f"Rs. {price_match.group(1)}",
-                                "description": chunk["content"][:200],
+                    # 1. Use meta_tag for primary categorization
+                    if meta_tag == "menu items":
+                        # Further refine: is it a deal or regular item?
+                        is_deal = any(word in content.lower() for word in ["deal", "offer", "combo", "special", "promotion"])
+                        if is_deal:
+                            deals.append({
+                                "name": "Special Deal",
+                                "description": content,
                                 "relevance": chunk["similarity"]
                             })
+                        else:
+                            # Try to extract price
+                            price_match = re.search(r'rs\.?\s*(\d+)', content, re.IGNORECASE)
+                            price = f"Rs. {price_match.group(1)}" if price_match else "Price N/A"
+                            menu_items.append({
+                                "name": "Menu Item",
+                                "price": price,
+                                "description": content,
+                                "relevance": chunk["similarity"]
+                            })
+                    elif meta_tag in ["general information", "restaurant identity"]:
+                        general_info[f"info_{len(general_info)}"] = content
+                    elif meta_tag == "location information":
+                        location_info[f"info_{len(location_info)}"] = content
                     
-                    # Check for deals
-                    if any(word in content for word in ["deal", "offer", "combo", "special", "promotion"]):
-                        deals.append({
-                            "name": "Deal from PDF",
-                            "description": chunk["content"][:200],
-                            "relevance": chunk["similarity"]
-                        })
+                    # 2. Fallback to keyword-based detection if meta_tag is missing or generic
+                    else:
+                        if any(word in content.lower() for word in ["price", "rs", "rupee", "cost"]):
+                            price_match = re.search(r'rs\.?\s*(\d+)', content, re.IGNORECASE)
+                            price = f"Rs. {price_match.group(1)}" if price_match else "Price N/A"
+                            menu_items.append({
+                                "name": "Menu Item (Detected)",
+                                "price": price,
+                                "description": content,
+                                "relevance": chunk["similarity"]
+                            })
+                        
+                        if any(word in content.lower() for word in ["deal", "offer", "combo", "special", "promotion"]):
+                            deals.append({
+                                "name": "Deal (Detected)",
+                                "description": content,
+                                "relevance": chunk["similarity"]
+                            })
                 
                 comprehensive_results["results"][rid] = {
                     "name": restaurant_name,
@@ -692,9 +716,9 @@ class MultiRestaurantRAGSystem:
             retrieved_chunks = self.search_vector_db(query, target_ids, top_k=20)
             
             for chunk in retrieved_chunks:
-                # Try to extract structured information from chunk
+                # Extract structured information from chunk
                 content = chunk["content"]
-                metadata = chunk.get("metadata", {})
+                meta_tag = chunk.get("meta_tag", "menu")
                 
                 # Extract price if available
                 price_match = re.search(r'rs\.?\s*(\d+)', content, re.IGNORECASE)
@@ -707,11 +731,11 @@ class MultiRestaurantRAGSystem:
                 results.append({
                     "restaurant_id": chunk["restaurant_id"],
                     "restaurant_name": chunk["restaurant_name"],
-                    "section": metadata.get("type", "menu"),
+                    "section": meta_tag,
                     "item": {
                         "name": item_name,
                         "price": price,
-                        "description": content[:200]
+                        "description": content
                     },
                     "relevance": chunk["similarity"]
                 })

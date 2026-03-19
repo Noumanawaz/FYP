@@ -3,14 +3,15 @@ NeonDB pgvector store for restaurant embeddings.
 
 Schema (created on first use):
   restaurant_embeddings(
-      id             SERIAL PRIMARY KEY,
-      restaurant_id  TEXT NOT NULL,
+      id              SERIAL PRIMARY KEY,
+      restaurant_id   TEXT NOT NULL,
       restaurant_name TEXT NOT NULL,
-      chunk_index    INTEGER,
-      content        TEXT NOT NULL,
-      embedding      vector(384),       -- all-MiniLM-L6-v2 output dim
-      pdf_filename   TEXT,
-      created_at     TIMESTAMPTZ DEFAULT NOW()
+      chunk_index     INTEGER,
+      content         TEXT NOT NULL,
+      embedding       vector(384),       -- all-MiniLM-L6-v2 output dim
+      meta_tag        TEXT,              -- e.g., 'general information', 'menu categories'
+      pdf_filename    TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
   )
 """
 
@@ -62,6 +63,17 @@ def setup_table() -> bool:
                     );
                 """)
 
+                # Add meta_tag column if it doesn't exist
+                cur.execute("""
+                    DO $$ 
+                    BEGIN 
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                     WHERE table_name='restaurant_embeddings' AND column_name='meta_tag') THEN
+                            ALTER TABLE restaurant_embeddings ADD COLUMN meta_tag TEXT;
+                        END IF;
+                    END $$;
+                """)
+
                 # Index for fast cosine-similarity search
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_restaurant_embeddings_vec
@@ -90,15 +102,19 @@ def upsert_chunks(
     restaurant_id: str,
     restaurant_name: str,
     chunks: List[str],
-    embeddings: np.ndarray,
+    embeddings: Optional[np.ndarray] = None,
+    meta_tags: Optional[List[str]] = None,
     pdf_filename: str = "",
 ) -> int:
     """
     Delete all existing chunks for this restaurant_id, then insert new ones.
     Returns the number of chunks inserted.
     """
-    if len(chunks) != len(embeddings):
+    if embeddings is not None and len(chunks) != len(embeddings):
         raise ValueError("chunks and embeddings must have the same length")
+    
+    if meta_tags is not None and len(chunks) != len(meta_tags):
+        raise ValueError("chunks and meta_tags must have the same length")
 
     conn = _get_conn()
     try:
@@ -110,28 +126,31 @@ def upsert_chunks(
                     (restaurant_id,),
                 )
 
-                rows = [
-                    (
+                rows = []
+                for i, chunk in enumerate(chunks):
+                    emb = embeddings[i].tolist() if embeddings is not None else None
+                    tag = meta_tags[i] if meta_tags is not None else None
+                    
+                    rows.append((
                         restaurant_id,
                         restaurant_name,
                         i,
                         chunk,
-                        embeddings[i].tolist(),   # list[float] → pgvector
+                        emb,
+                        tag,
                         pdf_filename,
-                    )
-                    for i, chunk in enumerate(chunks)
-                ]
+                    ))
 
                 psycopg2.extras.execute_values(
                     cur,
                     """
                     INSERT INTO restaurant_embeddings
                         (restaurant_id, restaurant_name, chunk_index,
-                         content, embedding, pdf_filename)
+                         content, embedding, meta_tag, pdf_filename)
                     VALUES %s
                     """,
                     rows,
-                    template="(%s, %s, %s, %s, %s::vector, %s)",
+                    template="(%s, %s, %s, %s, %s::vector, %s, %s)",
                     page_size=100,
                 )
 
@@ -164,6 +183,7 @@ def search_similar(
                         restaurant_name,
                         chunk_index,
                         content,
+                        meta_tag,
                         pdf_filename,
                         1 - (embedding <=> %s::vector) AS similarity
                     FROM restaurant_embeddings
@@ -181,6 +201,7 @@ def search_similar(
                         restaurant_name,
                         chunk_index,
                         content,
+                        meta_tag,
                         pdf_filename,
                         1 - (embedding <=> %s::vector) AS similarity
                     FROM restaurant_embeddings
