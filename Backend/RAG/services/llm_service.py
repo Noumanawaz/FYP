@@ -7,6 +7,8 @@ import re
 
 load_dotenv()
 
+import httpx
+
 class OpenAILLMService:
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
@@ -14,7 +16,7 @@ class OpenAILLMService:
         # gpt-4o-mini is much smarter than Groq models
         self.model = os.getenv('LLM_MODEL', 'gpt-4o-mini')
         self.temperature = float(os.getenv('TEMPERATURE', '0.7'))
-        self.max_tokens = int(os.getenv('MAX_TOKENS', '500'))
+        self.max_tokens = int(os.getenv('MAX_TOKENS', '800')) # Increased for dual response
 
         # Check if API key is properly configured
         if not self.api_key or self.api_key.strip() in ['your_openai_api_key_here', '']:
@@ -25,13 +27,53 @@ class OpenAILLMService:
             print(f"✅ Using OpenAI model: {self.model}")
         print(f"ℹ️  OpenAI base_url: {self.base_url}")
 
-    def _call_openai(self, messages: List[Dict], max_tokens: Optional[int] = None) -> str:
-        """Low-level call to OpenAI API"""
+    async def _call_openai_async(self, messages: List[Dict], max_tokens: Optional[int] = None, response_format: Optional[Dict] = None) -> str:
+        """Async call to OpenAI API using httpx"""
         if not self.api_configured:
             return ""
 
         tokens = max_tokens or self.max_tokens
-        print(f"➡️  Calling OpenAI /chat/completions | model={self.model} temp={self.temperature} max_tokens={tokens}")
+        print(f"➡️  Calling OpenAI (Async) /chat/completions | model={self.model}")
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": tokens,
+        }
+        if response_format:
+            payload["response_format"] = response_format
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=20.0
+                )
+                
+                if resp.status_code == 200:
+                    result = resp.json()
+                    if 'choices' in result and result['choices']:
+                        return result['choices'][0]['message']['content'].strip()
+                else:
+                    print(f"❌ OpenAI API error {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"❌ Error calling OpenAI async: {e}")
+            
+        return ""
+
+    def _call_openai(self, messages: List[Dict], max_tokens: Optional[int] = None) -> str:
+        """Low-level call to OpenAI API (Sync fallback)"""
+        if not self.api_configured:
+            return ""
+
+        tokens = max_tokens or self.max_tokens
+        print(f"➡️  Calling OpenAI (Sync) /chat/completions | model={self.model}")
         try:
             resp = requests.post(
                 f"{self.base_url}/chat/completions",
@@ -60,8 +102,62 @@ class OpenAILLMService:
             
         return ""
     
+    async def generate_dual_response(self, user_message: str, context: str = "", conversation_history: list = None) -> Dict[str, str]:
+        """
+        Generate both English and Urdu responses in a single OpenAI call to minimize latency.
+        Returns Dict with 'en' and 'ur' keys.
+        """
+        if not self.api_configured:
+            fallback = self._get_fallback_response(user_message, context)
+            return {"en": fallback, "ur": fallback}
+
+        # Create the system prompt for dual-language JSON response
+        system_prompt = self._create_system_prompt() + """
+CRITICAL: You MUST respond in JSON format with exactly two keys:
+1. "en": Your natural English response.
+2. "ur": Your natural Urdu translation (in Urdu script/Arabic characters).
+
+Example:
+{
+  "en": "Hello, how can I help you?",
+  "ur": "ہیلو، میں آپ کی کیا مدد کر سکتا ہوں؟"
+}
+"""
+        
+        # Build user message with context
+        if context:
+            user_prompt = f"Customer asked: \"{user_message}\"\n\nMenu info:\n{context}"
+        else:
+            user_prompt = user_message
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        if conversation_history:
+            for msg in conversation_history[-4:]: # Use fewer history items for speed
+                messages.append(msg)
+        messages.append({"role": "user", "content": user_prompt})
+
+        try:
+            raw_response = await self._call_openai_async(
+                messages, 
+                response_format={"type": "json_object"}
+            )
+            
+            if not raw_response:
+                fallback = self._get_fallback_response(user_message, context)
+                return {"en": fallback, "ur": fallback}
+            
+            result = json.loads(raw_response)
+            return {
+                "en": self._clean_response(result.get("en", "")),
+                "ur": result.get("ur", "").strip()
+            }
+        except Exception as e:
+            print(f"❌ Error in generate_dual_response: {e}")
+            fallback = self._get_fallback_response(user_message, context)
+            return {"en": fallback, "ur": fallback}
+
     def generate_response(self, user_message: str, context: str = "", conversation_history: list = None) -> str:
-        """Generate a response using OpenAI API with RAG context"""
+        """Generate a response using OpenAI API with RAG context (Sync)"""
         
         # If API is not configured, use fallback
         if not self.api_configured:
@@ -111,9 +207,7 @@ Your goals:
 - Use the provided menu information to answer accurately.
 - ALWAYS include prices from the menu naturally.
 - NO markdown formatting (no **bold**, no bullet points with - or *).
-- If the user uses Roman Urdu, respond in Roman Urdu.
-- If the user uses English, respond in English.
-- Use only the English alphabet for all responses.
+- Use only the English alphabet for English responses.
 
 CRITICAL: 
 - Provide high-quality, professional, and helpful responses.

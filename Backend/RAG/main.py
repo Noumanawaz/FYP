@@ -114,15 +114,14 @@ async def chat(request: ChatRequest):
     try:
         print(f"💬 Chat: {request.message}")
         
-        # 1. RAG Context Retrieval
-        rag_result = rag_system.process_query(request.message)
+        # 1. RAG Context Retrieval (Offload to thread to keep loop free)
+        rag_result = await asyncio.to_thread(rag_system.process_query, request.message)
         context = rag_result.get('context', '')
         
-        # 2. LLM English Response
-        llm_response_en = llm_service.generate_response(request.message, context)
-        
-        # 3. Urdu Translation
-        llm_response_ur = llm_service.translate_to_urdu(llm_response_en)
+        # 2. Dual LLM Response (EN + UR in one call)
+        responses = await llm_service.generate_dual_response(request.message, context)
+        llm_response_en = responses['en']
+        llm_response_ur = responses['ur']
         
         # Metadata
         detected = rag_result.get('detected_restaurants', [])
@@ -155,12 +154,14 @@ async def websocket_endpoint(websocket: WebSocket):
             if msg.get("type") == "chat":
                 text = msg.get("message", "")
                 
-                # Flow: RAG -> LLM -> Urdu -> Return
-                rag_result = rag_system.process_query(text)
+                # 1. RAG Context Retrieval (Offload to thread)
+                rag_result = await asyncio.to_thread(rag_system.process_query, text)
                 context = rag_result.get('context', '')
                 
-                resp_en = llm_service.generate_response(text, context)
-                resp_ur = llm_service.translate_to_urdu(resp_en)
+                # 2. Dual LLM Response (Async combined call)
+                responses = await llm_service.generate_dual_response(text, context)
+                resp_en = responses['en']
+                resp_ur = responses['ur']
                 
                 detected = rag_result.get('detected_restaurants', [])
                 
