@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, X } from 'lucide-react';
+import { MapPin, Navigation, Loader2 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -50,12 +50,14 @@ interface MapAddressSelectorProps {
   title?: string;
 }
 
+import Modal from '../Common/Modal';
+
 const MapAddressSelector: React.FC<MapAddressSelectorProps> = ({
   isOpen,
   onClose,
   onSelect,
   initialCoords = null,
-  title = 'Select Location on Map',
+  title = 'Geospatial Node Selector',
 }) => {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(initialCoords);
   const [loadingLoc, setLoadingLoc] = useState(false);
@@ -77,7 +79,7 @@ const MapAddressSelector: React.FC<MapAddressSelectorProps> = ({
     setLoadingLoc(true);
 
     if (!('geolocation' in navigator)) {
-      setLocError('Geolocation is not supported by your browser.');
+      setLocError('Geolocation navigation not supported by current terminal.');
       setLoadingLoc(false);
       return;
     }
@@ -90,9 +92,8 @@ const MapAddressSelector: React.FC<MapAddressSelectorProps> = ({
         setLoadingLoc(false);
       },
       (err) => {
-        setLocError(`Unable to get location: ${err.message}`);
+        setLocError(`GPS Handshake failure: ${err.message}`);
         setLoadingLoc(false);
-        // Set default to Karachi if geolocation fails
         const defaultCoords = { lat: 24.8607, lng: 67.0011 };
         setCoords(defaultCoords);
         setSelectedCoords(defaultCoords);
@@ -103,7 +104,6 @@ const MapAddressSelector: React.FC<MapAddressSelectorProps> = ({
 
   const handleMapClick = (lat: number, lng: number) => {
     setSelectedCoords({ lat, lng });
-    // You can add reverse geocoding here to get address from coordinates
     setAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
   };
 
@@ -114,113 +114,100 @@ const MapAddressSelector: React.FC<MapAddressSelectorProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  const footer = (
+    <div className="flex gap-4">
+      <button
+        onClick={onClose}
+        className="flex-1 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+      >
+        Discard
+      </button>
+      <button
+        onClick={handleUseLocation}
+        disabled={!selectedCoords}
+        className="flex-[2] py-3 bg-cyan-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all disabled:opacity-50"
+      >
+        Lock Coordinates
+      </button>
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white w-[95%] max-w-3xl rounded-2xl shadow-xl overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 grid place-items-center rounded-full hover:bg-gray-100"
-            aria-label="Close"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      footer={footer}
+      maxWidth="max-w-4xl"
+    >
+      <div className="space-y-6">
+        {loadingLoc && (
+          <div className="flex items-center gap-3 p-4 bg-cyan-500/5 border border-cyan-500/10 rounded-2xl animate-pulse">
+            <Loader2 className="w-4 h-4 text-cyan-500 animate-spin" />
+            <span className="text-[10px] font-bold text-cyan-600 uppercase tracking-widest">Establishing GPS Link...</span>
+          </div>
+        )}
+        
+        {locError && (
+          <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl text-[10px] font-bold text-red-500 uppercase tracking-widest">
+            {locError}
+          </div>
+        )}
+
+        <div className="h-[450px] rounded-[2rem] overflow-hidden border border-gray-100 dark:border-white/5 relative shadow-inner">
+          <MapContainer
+            center={coords ? [coords.lat, coords.lng] : [24.8607, 67.0011]}
+            zoom={coords ? 15 : 13}
+            className="h-full w-full grayscale-[0.2] dark:invert dark:hue-rotate-180 dark:brightness-95"
+            style={{ cursor: 'crosshair', background: '#f8fafc' }}
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution="&copy; OpenStreetMap contributors"
+            />
+            <MapClickHandler onMapClick={handleMapClick} />
 
-        <div className="p-4 space-y-3">
-          {loadingLoc && <div className="text-sm text-gray-600">Finding your location…</div>}
-          {locError && <div className="text-sm text-red-600">{locError}</div>}
+            {selectedCoords && (
+              <>
+                <Marker position={[selectedCoords.lat, selectedCoords.lng]}>
+                  <Popup className="premium-popup">Node: {selectedCoords.lat.toFixed(4)}, {selectedCoords.lng.toFixed(4)}</Popup>
+                </Marker>
+                <Circle
+                  center={[selectedCoords.lat, selectedCoords.lng]}
+                  radius={200}
+                  pathOptions={{ color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.1, weight: 1.5 }}
+                />
+                <Recenter lat={selectedCoords.lat} lng={selectedCoords.lng} />
+              </>
+            )}
 
-          <div className="h-[420px] rounded-xl overflow-hidden border relative">
-            <MapContainer
-              center={coords ? [coords.lat, coords.lng] : [24.8607, 67.0011]}
-              zoom={coords ? 13 : 13}
-              className="h-full w-full relative"
-              style={{ cursor: 'crosshair' }}
-            >
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution="&copy; OpenStreetMap contributors"
-              />
-              <MapClickHandler onMapClick={handleMapClick} />
-
-              {selectedCoords && (
-                <>
-                  <Marker position={[selectedCoords.lat, selectedCoords.lng]}>
-                    <Popup>Selected Location</Popup>
-                  </Marker>
-                  <Circle
-                    center={[selectedCoords.lat, selectedCoords.lng]}
-                    radius={500}
-                    pathOptions={{ color: 'blue', fillColor: 'skyblue', fillOpacity: 0.2 }}
-                  />
-                  <Recenter lat={selectedCoords.lat} lng={selectedCoords.lng} />
-                </>
-              )}
-
-              {coords && !selectedCoords && (
-                <>
-                  <Marker position={[coords.lat, coords.lng]}>
-                    <Popup>Your current location</Popup>
-                  </Marker>
-                  <Circle
-                    center={[coords.lat, coords.lng]}
-                    radius={15000}
-                    pathOptions={{ color: 'blue', fillColor: 'skyblue', fillOpacity: 0.2 }}
-                  />
-                  <Recenter lat={coords.lat} lng={coords.lng} />
-                </>
-              )}
-
-              {/* Locate button */}
-              <div className="absolute bottom-4 right-4 z-[1000]">
-                <button
-                  onClick={handleLocate}
-                  className="p-3 rounded-full shadow bg-white hover:bg-gray-100 border border-gray-300"
-                  aria-label="Locate"
-                >
-                  <Navigation className="w-5 h-5 text-gray-700" />
-                </button>
-              </div>
-            </MapContainer>
-          </div>
-
-          {selectedCoords && (
-            <div className="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span>
-                  Selected: {selectedCoords.lat.toFixed(6)}, {selectedCoords.lng.toFixed(6)}
-                </span>
-              </div>
+            <div className="absolute bottom-6 right-6 z-[1000]">
+              <button
+                onClick={handleLocate}
+                className="p-4 rounded-2xl shadow-2xl bg-white dark:bg-[#1A1A1A] text-gray-900 dark:text-white border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-90 transition-all group"
+                aria-label="Locate"
+              >
+                <Navigation className="w-5 h-5 group-hover:text-cyan-500 transition-colors" />
+              </button>
             </div>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleUseLocation}
-              disabled={!selectedCoords}
-              className={`px-4 py-2 rounded-lg text-white ${
-                selectedCoords
-                  ? 'bg-blue-600 hover:bg-blue-700'
-                  : 'bg-gray-300 cursor-not-allowed'
-              }`}
-            >
-              Use this location
-            </button>
-          </div>
+          </MapContainer>
         </div>
+
+        {selectedCoords && (
+          <div className="flex items-center gap-4 p-5 bg-gray-50/50 dark:bg-white/[0.03] rounded-3xl border border-gray-100 dark:border-white/5 backdrop-blur-sm">
+            <div className="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Target Coordinates</p>
+              <p className="text-sm font-black text-gray-900 dark:text-white tracking-tight">
+                {selectedCoords.lat.toFixed(6)}, {selectedCoords.lng.toFixed(6)}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };
 

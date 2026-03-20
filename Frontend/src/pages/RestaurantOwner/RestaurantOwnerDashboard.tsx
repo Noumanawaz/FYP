@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../../contexts/AppContext';
 import { apiService } from '../../services/api';
-import { UtensilsCrossed, LogOut, Building2, Folder, MapPin, Eye, Brain, Loader2, CheckCircle, AlertCircle, ClipboardList } from 'lucide-react';
+import { Building2, Folder, MapPin, Eye, ClipboardList, UtensilsCrossed } from 'lucide-react';
 import RestaurantInfo from './components/RestaurantInfo';
 import LocationsTab from './components/LocationsTab';
 import CategoriesTab from './components/CategoriesTab';
@@ -11,8 +11,8 @@ import MenuItemsTab from './components/MenuItemsTab';
 import MenuPreview from './components/MenuPreview';
 import RestaurantSetupWizard from './components/RestaurantSetupWizard';
 import OrdersTab from './components/OrdersTab';
+import RestaurantOwnerHeader from './components/RestaurantOwnerHeader';
 import { buildPDFBlob } from '../../utils/restaurantExportUtils';
-import { VOCABITELogo } from "../../components/Layout/Header";
 
 const RAG_BASE_URL = (import.meta as any).env?.VITE_RAG_URL ?? 'http://localhost:8000';
 
@@ -47,7 +47,6 @@ const RestaurantOwnerDashboard: React.FC = () => {
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [aiSaving, setAiSaving] = useState(false);
   const [aiStatus, setAiStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  // Track which tabs have been visited to enable lazy mounting (mount once, keep forever)
   const [visitedTabs, setVisitedTabs] = useState<Set<TabType>>(new Set(['restaurant']));
 
   const hasLoaded = React.useRef(false);
@@ -58,7 +57,6 @@ const RestaurantOwnerDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    // Guard against double-firing in React StrictMode or when context re-renders
     if (!user || user.role !== 'restaurant_owner') {
       if (!user) setLoading(true);
       return;
@@ -66,7 +64,7 @@ const RestaurantOwnerDashboard: React.FC = () => {
     if (hasLoaded.current) return;
     hasLoaded.current = true;
     loadRestaurant();
-  }, [user?.user_id, user?.role]);
+  }, [user?.id, user?.role]);
 
   const loadRestaurant = async () => {
     setLoading(true);
@@ -76,7 +74,6 @@ const RestaurantOwnerDashboard: React.FC = () => {
       if (response.success && response.data) {
         const rest = response.data as Restaurant;
         setRestaurant(rest);
-        // Pre-load locations so Save to AI doesn't need a separate fetch
         try {
           const locRes = await apiService.getRestaurantLocations(rest.restaurant_id);
           setLocations(Array.isArray(locRes.data) ? locRes.data : []);
@@ -102,7 +99,6 @@ const RestaurantOwnerDashboard: React.FC = () => {
     setAiSaving(true);
     setAiStatus('idle');
     try {
-      // Fetch categories + menu items in parallel (locations already in state)
       const [catRes, menuRes] = await Promise.all([
         apiService.getCategories(restaurant.restaurant_id).catch(() => ({ data: [] })),
         apiService.getMenuItems(restaurant.restaurant_id).catch(() => ({ data: [] })),
@@ -135,8 +131,6 @@ const RestaurantOwnerDashboard: React.FC = () => {
         menuItems,
       };
 
-      console.log(`📄 Building AI PDF: ${branches.length} branches, ${menuCategories.length} categories, ${menuItems.length} menu items`);
-
       const pdfBlob = buildPDFBlob(exportData);
       const pdfFile = new File(
         [pdfBlob],
@@ -153,16 +147,11 @@ const RestaurantOwnerDashboard: React.FC = () => {
         body: form,
       });
       if (res.ok) {
-        const data = await res.json();
-        console.log(`✅ Save to AI: ${data.chunks_created} chunks updated for ${restaurant.name}`);
         setAiStatus('success');
       } else {
-        const errText = await res.text().catch(() => res.status.toString());
-        console.error('Save to AI failed:', res.status, errText);
         setAiStatus('error');
       }
     } catch (err) {
-      console.error('Save to AI error:', err);
       setAiStatus('error');
     } finally {
       setAiSaving(false);
@@ -227,97 +216,39 @@ const RestaurantOwnerDashboard: React.FC = () => {
   if (!restaurant) {
     return (
       <div className="min-h-screen bg-[#050505] text-white">
-        <header className="bg-[#111] shadow-sm border-b border-white/5">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <Link to="/" className="inline-block mb-1"><VOCABITELogo /></Link>
-                <h1 className="text-2xl font-bold text-white mt-2">Restaurant Owner Portal</h1>
-                <p className="text-sm text-gray-400">Welcome, {user.name}</p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-white/5 hover:text-white border border-transparent hover:border-white/10 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-            </div>
-          </div>
-        </header>
-
+        <RestaurantOwnerHeader
+          restaurantName=""
+          onLogout={handleLogout}
+          onSaveToAI={handleSaveToAI}
+          aiSaving={aiSaving}
+          aiStatus={aiStatus}
+        />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {showWelcomeBanner && (
             <div className="mb-6 bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 border border-cyan-500/20 rounded-lg p-6 shadow-sm relative">
-              <button
-                onClick={() => setShowWelcomeBanner(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold leading-none"
-                aria-label="Close"
-              >
-                ×
-              </button>
+              <button onClick={() => setShowWelcomeBanner(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">×</button>
               <div className="flex items-start gap-4">
-                <div className="flex-shrink-0">
-                  <UtensilsCrossed className="w-8 h-8 text-cyan-400" />
-                </div>
+                <UtensilsCrossed className="w-8 h-8 text-cyan-400" />
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-white mb-1">Welcome to Your Restaurant Portal!</h3>
-                  <p className="text-gray-300 mb-4">
-                    Get started by setting up your restaurant. Add your restaurant details, locations, and manage everything from here.
-                  </p>
+                  <p className="text-gray-300 mb-4">Get started by setting up your restaurant details and locations.</p>
                   <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        setShowWelcomeBanner(false);
-                        setShowCreateRestaurant(true);
-                      }}
-                      className="px-4 py-2 bg-cyan-500 text-gray-900 rounded-lg hover:bg-cyan-400 font-bold transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)]"
-                    >
-                      Setup Restaurant Now
-                    </button>
-                    <button
-                      onClick={() => setShowWelcomeBanner(false)}
-                      className="px-4 py-2 bg-transparent text-gray-300 border border-white/20 rounded-lg hover:bg-white/5 font-medium transition-colors"
-                    >
-                      I'll Do It Later
-                    </button>
+                    <button onClick={() => { setShowWelcomeBanner(false); setShowCreateRestaurant(true); }} className="px-4 py-2 bg-cyan-500 text-gray-900 rounded-lg hover:bg-cyan-400 font-bold transition-colors">Setup Restaurant Now</button>
+                    <button onClick={() => setShowWelcomeBanner(false)} className="px-4 py-2 bg-transparent text-gray-300 border border-white/20 rounded-lg hover:bg-white/5 font-medium transition-colors">I'll Do It Later</button>
                   </div>
                 </div>
               </div>
             </div>
           )}
-
-          {error && (
-            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
-              {error}
-            </div>
-          )}
-
           {showCreateRestaurant ? (
             <div className="bg-[#111] p-6 rounded-lg border border-white/5">
-              <RestaurantSetupWizard
-                onComplete={() => {
-                  setShowCreateRestaurant(false);
-                  setShowWelcomeBanner(false);
-                  loadRestaurant();
-                }}
-                onCancel={() => setShowCreateRestaurant(false)}
-              />
+              <RestaurantSetupWizard onComplete={() => { setShowCreateRestaurant(false); loadRestaurant(); }} onCancel={() => setShowCreateRestaurant(false)} />
             </div>
           ) : (
             <div className="bg-[#111] rounded-lg shadow border border-white/5 p-8 text-center">
               <UtensilsCrossed className="w-16 h-16 text-gray-500 mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-white mb-2">Welcome to Your Restaurant Portal</h2>
-              <p className="text-gray-400 mb-6">
-                Get started by setting up your restaurant. You can add your restaurant details, locations, and manage everything from here.
-              </p>
-              <button
-                onClick={() => setShowCreateRestaurant(true)}
-                className="px-6 py-3 bg-cyan-500 text-gray-900 rounded-lg hover:bg-cyan-400 font-bold transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)] hover:shadow-[0_0_20px_rgba(6,182,212,0.5)]"
-              >
-                <UtensilsCrossed className="w-5 h-5 inline-block mr-2" />
-                Setup Your Restaurant
-              </button>
+              <button onClick={() => setShowCreateRestaurant(true)} className="px-6 py-3 bg-cyan-500 text-gray-900 rounded-lg hover:bg-cyan-400 font-bold transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)]">Setup Your Restaurant</button>
             </div>
           )}
         </div>
@@ -335,84 +266,52 @@ const RestaurantOwnerDashboard: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans pb-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-          <div>
-            <div className="mb-4 inline-block">
-              <Link to="/"><VOCABITELogo /></Link>
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-white mb-2 mt-2">
-              Restaurant Owner Portal
-            </h1>
-            <div className="flex items-center text-sm text-gray-400">
-              <Building2 className="w-4 h-4 mr-1.5" />
-              <span>Welcome, {user.name}</span>
-            </div>
+    <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#0B0B0B] text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300">
+      <RestaurantOwnerHeader
+        restaurantName={restaurant.name}
+        onLogout={handleLogout}
+        onSaveToAI={handleSaveToAI}
+        aiSaving={aiSaving}
+        aiStatus={aiStatus}
+      />
+
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        <div className="mb-10">
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-2">
+            Restaurant Owner Portal
+          </h1>
+          <div className="flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+            <Building2 className="w-4 h-4 mr-2 text-cyan-500" />
+            <span>Management & Insights Hub</span>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
-            {/* Save to AI button only shown for authenticated restaurant owners */}
-            <button
-              onClick={handleSaveToAI}
-              disabled={aiSaving}
-              title="Re-ingest updated restaurant data into AI knowledge base"
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-medium text-sm transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] ${aiSaving
-                ? 'bg-purple-900/50 text-purple-300 cursor-not-allowed border border-purple-500/30'
-                : aiStatus === 'success'
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                  : aiStatus === 'error'
-                    ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                    : 'bg-purple-600 text-white hover:bg-purple-500 border border-purple-500'
-                }`}
-            >
-              {aiSaving ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Saving to AI&hellip;</>
-              ) : aiStatus === 'success' ? (
-                <><CheckCircle className="w-4 h-4" /> Saved to AI</>
-              ) : aiStatus === 'error' ? (
-                <><AlertCircle className="w-4 h-4" /> AI Save Failed</>
-              ) : (
-                <><Brain className="w-4 h-4" /> Save to AI</>
-              )}
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5 rounded-full font-medium text-sm transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </button>
-          </div>
-        </header>
+        </div>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+          <div className="mb-8 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-red-600 dark:text-red-400 text-sm font-medium">
             {error}
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="mb-10 w-full overflow-x-auto scrollbar-hide">
-          <nav className="inline-flex p-1.5 space-x-2 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-sm">
+        <div className="sticky top-20 z-40 bg-[#F9FAFB]/80 dark:bg-[#0B0B0B]/80 backdrop-blur-md mb-8 border-b border-gray-200 dark:border-white/5 mx-[-2rem] px-8 py-2">
+          <nav className="flex space-x-10 overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`relative px-6 py-2.5 text-sm font-semibold rounded-xl whitespace-nowrap transition-colors outline-none ${activeTab === tab.id ? 'text-gray-900' : 'text-gray-400 hover:text-white'
-                    }`}
+                  className={`relative pb-5 text-sm font-bold tracking-widest uppercase flex items-center gap-2.5 transition-all outline-none whitespace-nowrap ${
+                    isActive ? 'text-cyan-500' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                  }`}
                 >
-                  <span className="relative z-10 flex items-center gap-2">
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </span>
-                  {activeTab === tab.id && (
+                  <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-cyan-500' : ''}`} />
+                  {tab.label}
+                  {isActive && (
                     <motion.div
-                      layoutId="nav-pill"
-                      className="absolute inset-0 bg-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)] border border-cyan-300 rounded-xl"
-                      transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                      layoutId="active-tab-indicator"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
                     />
                   )}
                 </button>
@@ -421,8 +320,7 @@ const RestaurantOwnerDashboard: React.FC = () => {
           </nav>
         </div>
 
-        {/* Tab Content — lazy mounted: only mounts when first visited, then stays mounted hidden */}
-        <div>
+        <div className="animate-fade-in">
           <div className={activeTab === 'restaurant' ? 'block' : 'hidden'}>
             {visitedTabs.has('restaurant') && restaurant && (
               <RestaurantInfo
@@ -433,23 +331,18 @@ const RestaurantOwnerDashboard: React.FC = () => {
               />
             )}
           </div>
-
           <div className={activeTab === 'locations' ? 'block' : 'hidden'}>
             {visitedTabs.has('locations') && restaurant && <LocationsTab restaurantId={restaurant.restaurant_id} />}
           </div>
-
           <div className={activeTab === 'categories' ? 'block' : 'hidden'}>
             {visitedTabs.has('categories') && restaurant && <CategoriesTab restaurantId={restaurant.restaurant_id} />}
           </div>
-
           <div className={activeTab === 'menu' ? 'block' : 'hidden'}>
             {visitedTabs.has('menu') && restaurant && <MenuItemsTab restaurantId={restaurant.restaurant_id} />}
           </div>
-
           <div className={activeTab === 'orders' ? 'block' : 'hidden'}>
             {visitedTabs.has('orders') && restaurant && <OrdersTab restaurantId={restaurant.restaurant_id} locations={locations} />}
           </div>
-
           <div className={activeTab === 'preview' ? 'block' : 'hidden'}>
             {visitedTabs.has('preview') && restaurant && <MenuPreview restaurantId={restaurant.restaurant_id} />}
           </div>

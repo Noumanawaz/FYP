@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, MapPin, Phone, Check, UserPlus } from 'lucide-react';
+import { Plus, Trash2, MapPin, Phone, Loader2 } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import { geoapifyService } from '../../../services/geoapifyService';
 import MapAddressSelector from '../../../components/Location/MapAddressSelector';
+import Modal from '../../../components/Common/Modal';
 
 interface Location {
   location_id: string;
@@ -27,14 +28,8 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<Location | undefined>();
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [mapOpen, setMapOpen] = useState(false);
-
-  // Branch User Form State
-  const [showBranchUserForm, setShowBranchUserForm] = useState(false);
-  const [targetLocation, setTargetLocation] = useState<Location | undefined>();
-  const [branchUserData, setBranchUserData] = useState({ name: '', email: '', phone: '', password: '' });
 
   const hasLoaded = React.useRef(false);
 
@@ -59,12 +54,7 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
     }
   };
 
-  /* ─── Map select ─────────────────────────────────────────── */
-  const handleMapSelect = async (
-    coords: { lat: number; lng: number },
-    address?: string
-  ) => {
-    // Always call reverseGeocodeDetails for structured city/area/address
+  const handleMapSelect = async (coords: { lat: number; lng: number }, address?: string) => {
     try {
       const geo = await geoapifyService.reverseGeocodeDetails(coords.lat, coords.lng);
       if (geo) {
@@ -97,16 +87,11 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
     setMapOpen(false);
   };
 
-  /* ─── Submit ─────────────────────────────────────────────── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      if (editingLocation) {
-        alert('Update location — please delete and recreate for now.');
-        return;
-      }
       await apiService.addRestaurantLocation(restaurantId, {
         city: formData.city,
         area: formData.area,
@@ -116,7 +101,6 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
         lng: formData.lng ?? undefined,
       });
       setShowForm(false);
-      setEditingLocation(undefined);
       setFormData(EMPTY_FORM);
       loadLocations();
     } catch (err: any) {
@@ -126,253 +110,105 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
     }
   };
 
-  const handleEdit = (location: Location) => {
-    setEditingLocation(location);
-    setFormData({
-      city: location.city,
-      area: location.area,
-      address: location.address,
-      phone: location.phone || '',
-      lat: location.lat ?? null,
-      lng: location.lng ?? null,
-    });
-    setShowForm(true);
-  };
-
-  const handleCreate = () => {
-    setEditingLocation(undefined);
-    setFormData(EMPTY_FORM);
-    setShowForm(true);
-  };
-
   const handleDelete = async (_locationId: string) => {
-    if (!confirm('Delete this location? This cannot be undone.')) return;
-    try {
-      alert('Delete location — please contact admin to remove locations for now.');
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete location');
-    }
+    if (!confirm('This action will archive the location. Proceed?')) return;
+    alert('Contact administrator for branch decommissioning.');
   };
 
-  const handleCreateBranchUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetLocation) return;
-    setLoading(true);
-    setError('');
-    try {
-      if (!branchUserData.email && !branchUserData.phone) {
-         throw new Error('Please provide either an email or a phone number.');
-      }
-      await apiService.createBranchUser({
-        ...branchUserData,
-        restaurant_id: restaurantId,
-        location_id: targetLocation.location_id
-      });
-      setShowBranchUserForm(false);
-      setTargetLocation(undefined);
-      setBranchUserData({ name: '', email: '', phone: '', password: '' });
-      alert('Branch user created successfully!');
-    } catch (err: any) {
-      setError(err.message || 'Failed to create branch user');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const inputClasses = "w-full px-5 py-4 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm active:scale-[0.99] focus:bg-white dark:focus:bg-[#1A1A1A]";
+  const labelClasses = "text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1 mb-2 block";
 
-  /* ─── Loading state ──────────────────────────────────────── */
   if (loading && locations.length === 0) {
     return (
-      <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-        <p className="text-gray-400">Loading locations...</p>
+      <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+        <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mb-4" />
+        <p className="text-gray-400 font-medium tracking-widest uppercase text-xs">Loading Branches...</p>
       </div>
     );
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+    <div className="animate-fade-in space-y-10 max-w-7xl mx-auto">
+      {/* Tab Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white dark:bg-[#161616] p-8 rounded-[2rem] border border-gray-200 dark:border-white/5 shadow-sm transition-all">
         <div>
-          <h3 className="text-xl font-semibold">Branches & Locations</h3>
-          <p className="text-sm text-gray-400 mt-1">Manage your restaurant branches and locations</p>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Branch Network</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Scale your operations and manage regional presence</p>
         </div>
         <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-green-500 text-gray-900 text-white rounded-lg hover:bg-green-400 text-gray-900"
+          onClick={() => setShowForm(true)}
+          className="group flex items-center gap-2.5 px-8 py-3 bg-cyan-500 text-white rounded-full font-bold text-xs tracking-[0.2em] uppercase transition-all hover:scale-105 hover:bg-cyan-400 shadow-xl shadow-cyan-500/20"
         >
-          <Plus className="w-4 h-4" />
-          Add Location
+          <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" />
+          Add Branch
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-500/10 border border-red-200 rounded-lg text-red-400">{error}</div>
-      )}
-
-      {/* Add / Edit form */}
-      {showForm && (
-        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-6 mb-6 border border-white/5">
-          <h4 className="text-lg font-semibold mb-4">
-            {editingLocation ? 'Edit Location' : 'Add New Location'}
-          </h4>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* ── Select on Map button ── */}
-            <button
-              type="button"
-              onClick={() => setMapOpen(true)}
-              className={`w-full px-4 py-3 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 text-sm transition-all ${formData.lat && formData.lng
-                ? 'border-green-400 bg-green-500/10 text-green-400'
-                : 'border-[rgba(255,255,255,0.2)] hover:border-cyan-500/40 hover:bg-cyan-500/10 text-gray-400'
-                }`}
-            >
-              {formData.lat && formData.lng ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  {`📍 ${formData.lat.toFixed(5)}, ${formData.lng.toFixed(5)} — Change`}
-                </>
-              ) : (
-                <>
-                  <MapPin className="w-4 h-4" />
-                  Select on Map (auto-fills address)
-                </>
-              )}
-            </button>
-
-            {/* City / Area */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">City *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                  placeholder="e.g., Karachi"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Area *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.area}
-                  onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                  placeholder="e.g., Clifton"
-                />
-              </div>
-            </div>
-
-            {/* Address */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Address *</label>
-              <textarea
-                required
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                rows={2}
-                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                placeholder="Full street address..."
-              />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Phone</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                placeholder="e.g., +92 300 1234567"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingLocation(undefined);
-                  setFormData(EMPTY_FORM);
-                }}
-                className="flex-1 px-4 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg hover:bg-[#050505]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-green-500 text-gray-900 text-white rounded-lg hover:bg-green-400 text-gray-900 disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : editingLocation ? 'Update' : 'Add Location'}
-              </button>
-            </div>
-          </form>
+        <div className="p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-2xl text-red-600 dark:text-red-400 text-xs font-bold tracking-widest uppercase">
+          {error}
         </div>
       )}
 
-      {/* Existing locations */}
-      {locations.length === 0 ? (
-        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-8 text-center">
-          <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-400 mb-4">No locations added yet. Add your first branch location.</p>
-          <button onClick={handleCreate} className="px-4 py-2 bg-green-500 text-gray-900 text-white rounded-lg hover:bg-green-400 text-gray-900">
-            Add Location
+      {/* Grid Layout for Locations */}
+      {locations.length === 0 && !showForm ? (
+        <div className="flex flex-col items-center justify-center py-24 bg-white dark:bg-[#161616] border border-dashed border-gray-200 dark:border-white/10 rounded-[2.5rem] transition-all">
+          <div className="p-6 rounded-full bg-gray-50 dark:bg-white/5 mb-6">
+            <MapPin className="w-12 h-12 text-gray-300 dark:text-gray-600" />
+          </div>
+          <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2 text-center">No Active Units Established</h4>
+          <p className="text-gray-400 text-center max-w-sm px-6 mb-8">Begin your expansion by geolocating your first restaurant branch on the platform hub.</p>
+          <button onClick={() => setShowForm(true)} className="px-10 py-3.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full font-bold text-[10px] tracking-[0.25em] uppercase hover:scale-105 transition-all">
+            Establish First Unit
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-12 transition-all">
           {locations.map((location) => (
-            <div key={location.location_id} className="bg-[#111] border border-white/5 rounded-lg shadow p-4">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h4 className="font-semibold text-lg">{location.city}, {location.area}</h4>
-                  <p className="text-sm text-gray-400 mt-1">{location.address}</p>
-                  {location.lat && location.lng && (
-                    <p className="text-xs text-cyan-400 mt-1">
-                      📍 {Number(location.lat).toFixed(5)}, {Number(location.lng).toFixed(5)}
-                    </p>
-                  )}
+            <div key={location.location_id} className="group relative bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/5 rounded-[2rem] p-8 shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-1 flex flex-col h-full">
+              <div className="flex justify-between items-start mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3.5 rounded-2xl bg-cyan-500/5 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 transition-colors group-hover:bg-cyan-500 group-hover:text-white">
+                    <MapPin className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-xl text-gray-900 dark:text-white tracking-tight">{location.area}</h4>
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mt-0.5">{location.city} Node</p>
+                  </div>
                 </div>
-                <span className={`px-2 py-1 text-xs rounded-full ${location.status === 'open' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                  }`}>
+                <span className={`px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] rounded-full border ${
+                  location.status === 'open' 
+                    ? 'bg-green-500/5 text-green-600 border-green-500/20' 
+                    : 'bg-red-500/5 text-red-600 border-red-500/20'
+                }`}>
                   {location.status}
                 </span>
               </div>
-              {location.phone && (
-                <div className="flex items-center gap-2 text-sm text-gray-400 mb-3">
-                  <Phone className="w-4 h-4" />
-                  {location.phone}
-                </div>
-              )}
-              <div className="flex gap-2 mt-4">
+
+              <div className="space-y-4 mb-8">
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed truncate-2-lines h-10">
+                  {location.address}
+                </p>
+                {location.phone && (
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    <Phone className="w-3.5 h-3.5 text-cyan-500" />
+                    {location.phone}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-white/5">
                 <button
-                  onClick={() => handleEdit(location)}
-                  className="flex-1 px-3 py-2 bg-cyan-500/10 text-cyan-400 rounded-lg hover:bg-cyan-500/20 flex items-center justify-center gap-2 text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-white/5 text-gray-400 dark:text-gray-500 rounded-2xl font-bold text-[10px] tracking-widest uppercase cursor-default border border-transparent shadow-sm"
                 >
-                  <Edit className="w-4 h-4" />
-                  Edit
+                  <MapPin className="w-3.5 h-3.5" />
+                  Unit Operational
                 </button>
                 <button
                   onClick={() => handleDelete(location.location_id)}
-                  className="px-3 py-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 flex items-center justify-center text-sm"
+                  className="p-3 bg-gray-50 dark:bg-white/[0.03] text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all border border-gray-200 dark:border-white/5"
                 >
                   <Trash2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setTargetLocation(location);
-                    setShowBranchUserForm(true);
-                  }}
-                  className="px-3 py-2 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 flex items-center justify-center text-sm"
-                  title="Create Branch Account"
-                >
-                  <UserPlus className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -380,87 +216,97 @@ const LocationsTab: React.FC<LocationsTabProps> = ({ restaurantId }) => {
         </div>
       )}
 
-      {/* Map modal */}
+      {/* Establishment Modal System */}
+      <Modal 
+        isOpen={showForm} 
+        onClose={() => setShowForm(false)} 
+        title="Establish Unit"
+        footer={(
+          <div className="flex gap-4">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+            >
+              Discard Changes
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="flex-[1.5] py-4 bg-cyan-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/20 disabled:opacity-50"
+            >
+              {loading ? 'Processing...' : 'Sync Location Node'}
+            </button>
+          </div>
+        )}
+      >
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <button
+            type="button"
+            onClick={() => setMapOpen(true)}
+            className={`group w-full p-10 border-2 border-dashed rounded-[2.5rem] flex flex-col items-center justify-center gap-4 transition-all duration-300 ${
+              formData.lat && formData.lng
+                ? 'border-green-500 bg-green-500/5 text-green-600'
+                : 'border-gray-200 dark:border-white/10 text-gray-400 hover:border-cyan-500/50 hover:bg-cyan-500/[0.02]'
+            }`}
+          >
+            <div className={`p-4 rounded-full transition-colors ${formData.lat && formData.lng ? 'bg-green-500/10' : 'bg-gray-100 dark:bg-white/5 group-hover:bg-cyan-500/10'}`}>
+              <MapPin className={`w-8 h-8 ${formData.lat && formData.lng ? 'text-green-500' : 'group-hover:text-cyan-500'}`} />
+            </div>
+            <div className="text-center">
+              <span className="text-[11px] font-black uppercase tracking-[0.3em] block mb-1">Geospatial Selector</span>
+              <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest block">
+                {formData.lat && formData.lng ? `LAT: ${formData.lat.toFixed(4)} LNG: ${formData.lng.toFixed(4)}` : 'Initialize GPS Handshake'}
+              </span>
+            </div>
+          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className={labelClasses}>City Hub</label>
+              <input
+                type="text"
+                required
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className={inputClasses}
+                placeholder="e.g. London"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className={labelClasses}>Operational Area</label>
+              <input
+                type="text"
+                required
+                value={formData.area}
+                onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                className={inputClasses}
+                placeholder="e.g. Mayfair"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className={labelClasses}>Physical Address</label>
+            <textarea
+              required
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              rows={2}
+              className={`${inputClasses} resize-none`}
+              placeholder="Full street credentials..."
+            />
+          </div>
+        </form>
+      </Modal>
+
+      {/* Map Address Selector Integration */}
       <MapAddressSelector
         isOpen={mapOpen}
         onClose={() => setMapOpen(false)}
         onSelect={handleMapSelect}
-        initialCoords={
-          formData.lat && formData.lng
-            ? { lat: formData.lat, lng: formData.lng }
-            : null
-        }
-        title="Select Branch Location"
+        initialCoords={formData.lat && formData.lng ? { lat: formData.lat, lng: formData.lng } : null}
+        title="Geospatial Node Selector"
       />
-
-      {/* Create Branch User Modal */}
-      {showBranchUserForm && targetLocation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[#111] border border-white/10 rounded-xl shadow-2xl p-6 w-full max-w-md">
-            <h4 className="text-xl font-bold mb-2">Create Branch Account</h4>
-            <p className="text-sm text-gray-400 mb-6">Create an account for the manager of {targetLocation.area}, {targetLocation.city} branch.</p>
-            <form onSubmit={handleCreateBranchUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={branchUserData.name}
-                  onChange={(e) => setBranchUserData({ ...branchUserData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={branchUserData.email}
-                    onChange={(e) => setBranchUserData({ ...branchUserData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={branchUserData.phone}
-                    onChange={(e) => setBranchUserData({ ...branchUserData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Password *</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={branchUserData.password}
-                  onChange={(e) => setBranchUserData({ ...branchUserData, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-white/20 rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#050505] text-white"
-                />
-              </div>
-              <div className="flex gap-4 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowBranchUserForm(false)}
-                  className="flex-1 px-4 py-2 border border-white/20 rounded-lg hover:bg-white/5"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-4 py-2 bg-cyan-500 text-gray-900 rounded-lg hover:bg-cyan-400 font-bold disabled:opacity-50"
-                >
-                  {loading ? 'Creating...' : 'Create Account'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

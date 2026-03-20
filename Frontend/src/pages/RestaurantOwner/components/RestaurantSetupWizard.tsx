@@ -14,6 +14,7 @@ import {
     FileJson,
     Loader2,
     X,
+    Globe,
 } from 'lucide-react';
 import ImageUpload from '../../../components/Common/ImageUpload';
 import MapAddressSelector from '../../../components/Location/MapAddressSelector';
@@ -71,7 +72,7 @@ const TagInput: React.FC<TagInputProps> = ({
     tags,
     onChange,
     placeholder = 'Type and press Enter or comma',
-    color = 'bg-cyan-500/20 text-blue-800',
+    color = 'bg-cyan-500/5 text-cyan-600 dark:text-cyan-400 border-cyan-500/10',
 }) => {
     const [input, setInput] = useState('');
 
@@ -96,14 +97,16 @@ const TagInput: React.FC<TagInputProps> = ({
         if (input.trim()) addTag(input);
     };
 
+    const labelClasses = "text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1 mb-2 block";
+
     return (
-        <div>
-            <label className="block text-sm font-semibold text-gray-300 mb-2">{label}</label>
-            <div className="min-h-[52px] flex flex-wrap gap-2 items-center px-3 py-2 border-2 border-white/10 rounded-xl focus-within:border-cyan-500 bg-[#111] border border-white/5 transition-colors cursor-text">
+        <div className="space-y-2">
+            <label className={labelClasses}>{label}</label>
+            <div className="min-h-[58px] flex flex-wrap gap-2 items-center px-4 py-3 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus-within:ring-2 focus-within:ring-cyan-500/20 transition-all cursor-text focus-within:bg-white dark:focus-within:bg-[#1A1A1A]">
                 {tags.map((tag, i) => (
                     <span
                         key={i}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${color}`}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${color}`}
                     >
                         {tag}
                         <button
@@ -116,7 +119,7 @@ const TagInput: React.FC<TagInputProps> = ({
                     </span>
                 ))}
                 <input
-                    className="flex-1 min-w-[140px] outline-none bg-transparent text-sm text-gray-300 placeholder-gray-400"
+                    className="flex-1 min-w-[140px] outline-none bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
                     placeholder={tags.length === 0 ? placeholder : ''}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -124,7 +127,7 @@ const TagInput: React.FC<TagInputProps> = ({
                     onBlur={handleBlur}
                 />
             </div>
-            <p className="text-xs text-gray-400 mt-1">Press Enter or comma to add a tag</p>
+            <p className="text-[9px] text-gray-400 dark:text-gray-600 mt-1 italic font-medium ml-2">Atomic Directive: Press Enter or comma to append</p>
         </div>
     );
 };
@@ -149,18 +152,26 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
 
     const handleMapSelect = async (coords: { lat: number; lng: number }, address?: string) => {
         try {
-            const result = await geoapifyService.reverseGeocode(coords.lat, coords.lng);
-            const parts = (result || '').split(',');
-            const city = parts[parts.length - 1]?.trim() || '';
-            const area = parts[parts.length - 2]?.trim() || '';
-            onChange(index, {
-                ...branch,
-                lat: coords.lat,
-                lng: coords.lng,
-                city: branch.city || city,
-                area: branch.area || area,
-                address: branch.address || result || address || '',
-            });
+            const result = await geoapifyService.reverseGeocodeDetails(coords.lat, coords.lng);
+            if (result) {
+                const city = result.city || result.county || '';
+                const area = result.suburb || result.district || result.neighbourhood || '';
+                onChange(index, {
+                    ...branch,
+                    lat: coords.lat,
+                    lng: coords.lng,
+                    city: branch.city || city,
+                    area: branch.area || area,
+                    address: branch.address || result.formatted || address || '',
+                });
+            } else {
+                onChange(index, {
+                    ...branch,
+                    lat: coords.lat,
+                    lng: coords.lng,
+                    address: branch.address || address || `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`,
+                });
+            }
         } catch {
             onChange(index, {
                 ...branch,
@@ -171,20 +182,26 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
         }
     };
 
+    const inputClasses = "w-full px-5 py-3.5 rounded-2xl bg-gray-100 dark:bg-white/[0.03] border border-gray-200 dark:border-white/5 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm active:scale-[0.99] focus:bg-white dark:focus:bg-[#1A1A1A]";
+    const labelClasses = "text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1 mb-2 block";
+
     return (
-        <div className="relative bg-[#111] border border-white/5 border-2 border-white/10 rounded-2xl p-6 hover:border-cyan-500/30 transition-colors">
-            <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-cyan-500 text-gray-900 text-white flex items-center justify-center font-bold text-sm">
+        <div className="relative bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-white/10 rounded-[2rem] p-8 shadow-sm hover:shadow-xl transition-all duration-300">
+            <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-2xl bg-cyan-500 text-white flex items-center justify-center font-black text-sm shadow-lg shadow-cyan-500/20">
                         {index + 1}
                     </div>
-                    <h4 className="font-bold text-white">Branch {index + 1}</h4>
+                    <div>
+                        <h4 className="font-black text-gray-900 dark:text-white tracking-tight">Geospatial Hub {index + 1}</h4>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Physical Node Configuration</p>
+                    </div>
                 </div>
                 {canRemove && (
                     <button
                         type="button"
                         onClick={() => onRemove(index)}
-                        className="p-2 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                        className="p-3 text-red-500 hover:bg-red-500/10 rounded-2xl transition-all border border-transparent hover:border-red-500/20"
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
@@ -195,59 +212,64 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
             <button
                 type="button"
                 onClick={() => setIsMapOpen(true)}
-                className={`w-full mb-4 px-4 py-3 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 text-sm transition-all ${branch.lat && branch.lng
-                    ? 'border-green-400 bg-green-500/10 text-green-400'
-                    : 'border-[rgba(255,255,255,0.2)] hover:border-cyan-500/40 hover:bg-cyan-500/10 text-gray-400'
+                className={`group w-full mb-8 p-10 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center gap-4 transition-all duration-300 ${branch.lat && branch.lng
+                    ? 'border-green-500 bg-green-500/5 text-green-600'
+                    : 'border-gray-200 dark:border-white/10 text-gray-400 hover:border-cyan-500/50 hover:bg-cyan-500/[0.02]'
                     }`}
             >
-                <MapPin className="w-4 h-4" />
-                {branch.lat && branch.lng
-                    ? `📍 ${branch.lat.toFixed(5)}, ${branch.lng.toFixed(5)} — Change`
-                    : 'Pin Location on Map (optional)'}
+                <div className={`p-4 rounded-full transition-colors ${branch.lat && branch.lng ? 'bg-green-500/10' : 'bg-gray-100 dark:bg-white/5 group-hover:bg-cyan-500/10'}`}>
+                    <MapPin className={`w-6 h-6 ${branch.lat && branch.lng ? 'text-green-500' : 'group-hover:text-cyan-500'}`} />
+                </div>
+                <div className="text-center">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] block mb-1">Geospatial Selector</span>
+                    <span className="text-[9px] font-bold opacity-60 uppercase tracking-widest block font-mono">
+                        {branch.lat && branch.lng ? `LAT: ${branch.lat.toFixed(5)} LNG: ${branch.lng.toFixed(5)}` : 'Initialize GPS Handshake'}
+                    </span>
+                </div>
             </button>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">City *</label>
+                    <label className={labelClasses}>City Hub</label>
                     <input
                         type="text"
                         required
                         value={branch.city}
                         onChange={(e) => update('city', e.target.value)}
-                        placeholder="e.g., Lahore"
-                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors bg-[#111] text-white"
+                        placeholder="e.g. London"
+                        className={inputClasses}
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Area *</label>
+                    <label className={labelClasses}>Operational Area</label>
                     <input
                         type="text"
                         required
                         value={branch.area}
                         onChange={(e) => update('area', e.target.value)}
-                        placeholder="e.g., Gulberg"
-                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors bg-[#111] text-white"
+                        placeholder="e.g. Mayfair"
+                        className={inputClasses}
                     />
                 </div>
                 <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Full Address *</label>
+                    <label className={labelClasses}>Physical Address</label>
                     <textarea
                         required
                         value={branch.address}
                         onChange={(e) => update('address', e.target.value)}
-                        placeholder="Street address, building no., etc."
+                        placeholder="Digital address credentials..."
                         rows={2}
-                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors resize-none bg-[#111] text-white"
+                        className={`${inputClasses} resize-none`}
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Phone</label>
+                    <label className={labelClasses}>Direct Line</label>
                     <input
                         type="tel"
                         value={branch.phone}
                         onChange={(e) => update('phone', e.target.value)}
-                        placeholder="+92 300 1234567"
-                        className="w-full px-3 py-2.5 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none text-sm transition-colors bg-[#111] text-white"
+                        placeholder="+XX..."
+                        className={inputClasses}
                     />
                 </div>
             </div>
@@ -257,7 +279,7 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, index, onChange, onRemo
                 onClose={() => setIsMapOpen(false)}
                 onSelect={handleMapSelect}
                 initialCoords={branch.lat && branch.lng ? { lat: branch.lat, lng: branch.lng } : null}
-                title={`Branch ${index + 1} — Select Location`}
+                title={`Node ${index + 1} Location Sync`}
             />
         </div>
     );
@@ -278,58 +300,71 @@ interface ReviewProps {
 }
 
 const ReviewPanel: React.FC<ReviewProps> = ({ basic, identity, branches }) => (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
         {/* Header */}
-        <div className="flex items-center gap-4 p-5 bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 rounded-2xl border border-blue-100">
+        <div className="flex flex-col md:flex-row items-center gap-8 p-10 bg-gradient-to-br from-gray-50 to-white dark:from-[#1A1A1A] dark:to-[#111] rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-[60px] rounded-full group-hover:bg-cyan-500/10 transition-colors" />
+            
             {basic.logo_url ? (
-                <img src={basic.logo_url} alt="Logo" className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow" />
+                <div className="w-28 h-28 rounded-[2rem] overflow-hidden border-4 border-white dark:border-white/10 shadow-xl relative z-10 bg-white dark:bg-[#1A1A1A]">
+                    <img src={basic.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                </div>
             ) : (
-                <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold shadow">
+                <div className="w-28 h-28 rounded-[2rem] bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-black shadow-xl relative z-10">
                     {basic.name.charAt(0).toUpperCase()}
                 </div>
             )}
-            <div>
-                <h3 className="text-xl font-bold text-white">{basic.name}</h3>
-                <p className="text-sm text-gray-500 mt-0.5">{basic.country}{basic.founded_year ? ` · Est. ${basic.founded_year}` : ''}</p>
-                <span className="mt-1 inline-block px-3 py-0.5 bg-cyan-500/20 text-blue-800 rounded-full text-xs font-semibold capitalize">{basic.price_range}</span>
+            
+            <div className="flex-1 text-center md:text-left space-y-2">
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                    <h3 className="text-3xl font-black text-gray-900 dark:text-white tracking-tighter uppercase">{basic.name}</h3>
+                    <span className="px-4 py-1 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-[9px] font-black uppercase tracking-widest border border-cyan-500/20 w-fit mx-auto md:mx-0">
+                        {basic.price_range} tier
+                    </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] flex items-center justify-center md:justify-start gap-2">
+                    <Globe className="w-3 h-3" /> {basic.country} {basic.founded_year && ` · Est. ${basic.founded_year}`}
+                </p>
             </div>
         </div>
 
         {/* Identity */}
-        <div className="bg-[#111] border border-white/5 border border-white/10 rounded-2xl p-5">
-            <h4 className="font-bold text-gray-300 mb-4 flex items-center gap-2"><Tag className="w-4 h-4 text-cyan-400" /> Categories &amp; Identity</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-white/10 rounded-[2rem] p-8 shadow-sm">
+            <h4 className="font-black text-gray-900 dark:text-white mb-6 flex items-center gap-2 uppercase text-[12px] tracking-widest border-l-4 border-cyan-500 pl-4">Network Phylogeny</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
-                    <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Cuisine</p>
-                    <div className="flex flex-wrap gap-1">{identity.categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-cyan-500/10 text-cyan-300" />)}</div>
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-3 ml-1">Cuisine Array</p>
+                    <div className="flex flex-wrap gap-2">{identity.categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-cyan-500/5 text-cyan-600 dark:text-cyan-400 border border-cyan-500/10" />)}</div>
                 </div>
                 <div>
-                    <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Specialties</p>
-                    <div className="flex flex-wrap gap-1">{identity.specialties.map((t, i) => <TagBadge key={i} tag={t} color="bg-purple-50 text-purple-700" />)}</div>
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-3 ml-1">Core Specialties</p>
+                    <div className="flex flex-wrap gap-2">{identity.specialties.map((t, i) => <TagBadge key={i} tag={t} color="bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10" />)}</div>
                 </div>
                 <div>
-                    <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Keywords</p>
-                    <div className="flex flex-wrap gap-1">{identity.keywords.map((t, i) => <TagBadge key={i} tag={t} color="bg-white/5 text-gray-300" />)}</div>
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-3 ml-1">Discovery Tags</p>
+                    <div className="flex flex-wrap gap-2">{identity.keywords.map((t, i) => <TagBadge key={i} tag={t} color="bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-white/10" />)}</div>
                 </div>
                 <div>
-                    <p className="text-xs text-gray-500 font-semibold uppercase mb-2">Food Categories</p>
-                    <div className="flex flex-wrap gap-1">{identity.food_categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-green-500/10 text-green-400" />)}</div>
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-3 ml-1">Food Domains</p>
+                    <div className="flex flex-wrap gap-2">{identity.food_categories.map((t, i) => <TagBadge key={i} tag={t} color="bg-green-500/5 text-green-600 dark:text-green-400 border border-green-500/10" />)}</div>
                 </div>
             </div>
         </div>
 
         {/* Branches */}
-        <div className="bg-[#111] border border-white/5 border border-white/10 rounded-2xl p-5">
-            <h4 className="font-bold text-gray-300 mb-4 flex items-center gap-2"><GitBranch className="w-4 h-4 text-cyan-400" /> {branches.length} Branch{branches.length !== 1 ? 'es' : ''}</h4>
-            <div className="space-y-3">
+        <div className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-white/10 rounded-[2rem] p-8 shadow-sm">
+            <h4 className="font-black text-gray-900 dark:text-white mb-6 flex items-center gap-2 uppercase text-[12px] tracking-widest border-l-4 border-cyan-500 pl-4">{branches.length} Operational Nodes</h4>
+            <div className="space-y-4">
                 {branches.map((b, i) => (
-                    <div key={i} className="flex items-start gap-3 p-4 bg-[#050505] rounded-xl border border-white/10">
-                        <div className="w-7 h-7 rounded-full bg-cyan-500 text-gray-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
+                    <div key={i} className="flex items-start gap-5 p-6 bg-gray-50/50 dark:bg-white/[0.02] rounded-2xl border border-gray-100 dark:border-white/5 group/node transition-all hover:bg-white dark:hover:bg-white/[0.05]">
+                        <div className="w-10 h-10 rounded-2xl bg-cyan-500 text-white flex items-center justify-center text-sm font-black flex-shrink-0 mt-0.5 shadow-lg shadow-cyan-500/10 group-hover/node:scale-110 transition-transform">{i + 1}</div>
                         <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-white text-sm">{b.area}, {b.city}</p>
-                            <p className="text-xs text-gray-500 mt-0.5 truncate">{b.address}</p>
-                            {b.phone && <p className="text-xs text-gray-500 mt-0.5">📞 {b.phone}</p>}
-                            {b.lat && b.lng && <p className="text-xs text-green-500 mt-0.5">📍 {b.lat.toFixed(5)}, {b.lng.toFixed(5)}</p>}
+                            <p className="font-black text-gray-900 dark:text-white text-base tracking-tight">{b.area}, {b.city}</p>
+                            <p className="text-xs text-gray-500 mt-1 italic font-medium truncate">{b.address}</p>
+                            <div className="flex gap-4 mt-3">
+                                {b.phone && <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><Globe className="w-3 h-3" /> {b.phone}</span>}
+                                {b.lat && b.lng && <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest flex items-center gap-1.5"><MapPin className="w-3 h-3" /> {b.lat.toFixed(4)}, {b.lng.toFixed(4)}</span>}
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -527,39 +562,46 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
 
     /* ─────── Render ─────── */
     return (
-        <div className="bg-[#111] border border-white/5 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="bg-white dark:bg-[#111] border border-gray-200 dark:border-white/5 rounded-[3rem] shadow-2xl overflow-hidden animate-fade-in max-w-5xl mx-auto my-10">
             {/* Progress header */}
-            <div className="bg-gradient-to-r from-cyan-600 to-indigo-600 px-8 py-6">
-                <div className="flex items-center justify-between mb-6">
+            <div className="bg-gray-900 dark:bg-[#161616] px-10 py-12 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 blur-[100px] rounded-full" />
+                
+                <div className="relative z-10 flex items-center justify-between mb-10">
                     <div>
-                        <h2 className="text-2xl font-bold text-white">Setup Your Restaurant</h2>
-                        <p className="text-blue-200 text-sm mt-1">Step {step} of {STEPS.length}</p>
+                        <h2 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Network Onboarding</h2>
+                        <p className="text-[10px] font-bold text-cyan-500 uppercase tracking-[0.3em]">Module {step} of {STEPS.length} Calibration</p>
                     </div>
                     <button
                         onClick={onCancel}
-                        className="text-blue-200 hover:text-white transition-colors p-2 rounded-lg hover:bg-[#111] border border-white/5/10"
+                        className="p-3 rounded-2xl bg-white/5 text-white/40 hover:text-white hover:bg-white/10 transition-all border border-white/5"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-6 h-6" />
                     </button>
                 </div>
 
                 {/* Step indicators */}
-                <div className="flex items-center gap-0">
+                <div className="relative z-10 flex items-center gap-0 max-w-3xl mx-auto">
                     {STEPS.map((s, idx) => {
                         const Icon = s.icon;
                         const done = step > s.id;
                         const active = step === s.id;
                         return (
                             <React.Fragment key={s.id}>
-                                <div className="flex flex-col items-center">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${done ? 'bg-green-400 text-white' : active ? 'bg-[#111] border border-white/5 text-cyan-300 shadow-lg scale-110' : 'bg-[#111] border border-white/5/20 text-white/70'
+                                <div className="flex flex-col items-center group">
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+                                        done ? 'bg-green-500 text-white shadow-lg shadow-green-500/20 scale-95' : 
+                                        active ? 'bg-cyan-500 text-white shadow-2xl shadow-cyan-500/40 scale-110 ring-4 ring-cyan-500/20' : 
+                                        'bg-white/5 border border-white/10 text-white/30'
                                         }`}>
-                                        {done ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
+                                        {done ? <Check className="w-6 h-6" /> : <Icon className="w-5 h-5" />}
                                     </div>
-                                    <span className={`text-xs mt-1 font-medium hidden sm:block ${active ? 'text-white' : 'text-white/60'}`}>{s.label}</span>
+                                    <span className={`text-[9px] mt-4 font-black uppercase tracking-[0.2em] whitespace-nowrap transition-colors ${active ? 'text-white' : 'text-white/20'}`}>{s.label}</span>
                                 </div>
                                 {idx < STEPS.length - 1 && (
-                                    <div className={`flex-1 h-0.5 mx-1 mb-5 rounded-full transition-all ${done ? 'bg-green-400' : 'bg-[#111] border border-white/5/20'}`} />
+                                    <div className="flex-1 px-4 mb-12">
+                                        <div className={`h-[2px] w-full rounded-full transition-all duration-700 ${done ? 'bg-green-500' : 'bg-white/10'}`} />
+                                    </div>
                                 )}
                             </React.Fragment>
                         );
@@ -568,244 +610,261 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
             </div>
 
             {/* Body */}
-            <div className="p-8">
+            <div className="p-12 min-h-[500px] flex flex-col">
                 {error && (
-                    <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-200 rounded-xl text-red-400 text-sm">
-                        <X className="w-4 h-4 flex-shrink-0" />
+                    <div className="mb-8 flex items-center gap-4 px-6 py-4 bg-red-500/5 border border-red-500/10 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest animate-shake">
+                        <X className="w-5 h-5 flex-shrink-0" />
                         {error}
                     </div>
                 )}
 
-                {/* STEP 1 — Basic Info */}
-                {step === 1 && (
-                    <div className="space-y-5 animate-fadeIn">
-                        <div className="mb-2">
-                            <h3 className="text-lg font-bold text-white">Basic Information</h3>
-                            <p className="text-sm text-gray-500">Tell us the core details about your restaurant.</p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Restaurant Name <span className="text-red-500">*</span></label>
-                                <input
-                                    type="text"
-                                    value={basic.name}
-                                    onChange={(e) => setBasic({ ...basic, name: e.target.value })}
-                                    placeholder="e.g., The Spice Garden"
-                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
-                                />
+                <div className="flex-1">
+                    {/* STEP 1 — Basic Info */}
+                    {step === 1 && (
+                        <div className="space-y-10 animate-fade-up">
+                            <div className="border-b border-gray-100 dark:border-white/5 pb-6">
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight uppercase">Base Configuration</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 italic font-medium opacity-80">Define the core identity parameters of your enterprise.</p>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Country <span className="text-red-500">*</span></label>
-                                <input
-                                    type="text"
-                                    value={basic.country}
-                                    onChange={(e) => setBasic({ ...basic, country: e.target.value })}
-                                    placeholder="e.g., Pakistan"
-                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
-                                />
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1">Restaurant Designation</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={basic.name}
+                                        onChange={(e) => setBasic({ ...basic, name: e.target.value })}
+                                        placeholder="e.g. Ranchers"
+                                        className="w-full px-5 py-4 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1">Operational Hub (Country)</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={basic.country}
+                                        onChange={(e) => setBasic({ ...basic, country: e.target.value })}
+                                        placeholder="e.g. Pakistan"
+                                        className="w-full px-5 py-4 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1">Economic Tier</label>
+                                    <select
+                                        required
+                                        value={basic.price_range}
+                                        onChange={(e) => setBasic({ ...basic, price_range: e.target.value as any })}
+                                        className="w-full px-5 py-4 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm"
+                                    >
+                                        <option value="budget">Value / Budget (💰)</option>
+                                        <option value="mid-range">Contemporary Mid-Range (💰💰)</option>
+                                        <option value="premium">High-End Premium (💰💰💰)</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1">Establishment Year</label>
+                                    <input
+                                        type="number"
+                                        value={basic.founded_year}
+                                        onChange={(e) => setBasic({ ...basic, founded_year: e.target.value })}
+                                        placeholder="e.g. 2012"
+                                        min="1900"
+                                        max={new Date().getFullYear()}
+                                        className="w-full px-5 py-4 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Price Range <span className="text-red-500">*</span></label>
-                                <select
-                                    value={basic.price_range}
-                                    onChange={(e) => setBasic({ ...basic, price_range: e.target.value as any })}
-                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
-                                >
-                                    <option value="budget">💰 Budget</option>
-                                    <option value="mid-range">💰💰 Mid-Range</option>
-                                    <option value="premium">💰💰💰 Premium</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-300 mb-1.5">Founded Year</label>
-                                <input
-                                    type="number"
-                                    value={basic.founded_year}
-                                    onChange={(e) => setBasic({ ...basic, founded_year: e.target.value })}
-                                    placeholder="e.g., 2018"
-                                    min="1900"
-                                    max={new Date().getFullYear()}
-                                    className="w-full px-4 py-3 border-2 border-white/10 rounded-xl focus:border-cyan-500 focus:outline-none transition-colors bg-[#111] text-white"
-                                />
-                            </div>
-                        </div>
-                        <ImageUpload
-                            value={basic.logo_url}
-                            onChange={(url) => setBasic({ ...basic, logo_url: typeof url === 'string' ? url : url[0] || '' })}
-                            multiple={false}
-                            label="Restaurant Logo"
-                        />
-                    </div>
-                )}
 
-                {/* STEP 2 — Identity */}
-                {step === 2 && (
-                    <div className="space-y-5 animate-fadeIn">
-                        <div className="mb-2">
-                            <h3 className="text-lg font-bold text-white">Restaurant Identity</h3>
-                            <p className="text-sm text-gray-500">Help customers discover you. Type and press Enter to add each tag.</p>
-                        </div>
-                        <TagInput
-                            label="Cuisine Categories *"
-                            tags={identity.categories}
-                            onChange={(tags) => setIdentity({ ...identity, categories: tags })}
-                            placeholder="Italian, Pizza, Fast Food…"
-                            color="bg-cyan-500/20 text-blue-800"
-                        />
-                        <TagInput
-                            label="Specialties"
-                            tags={identity.specialties}
-                            onChange={(tags) => setIdentity({ ...identity, specialties: tags })}
-                            placeholder="Wood-fired Pizza, Pasta…"
-                            color="bg-purple-100 text-purple-800"
-                        />
-                        <TagInput
-                            label="Keywords"
-                            tags={identity.keywords}
-                            onChange={(tags) => setIdentity({ ...identity, keywords: tags })}
-                            placeholder="family-friendly, outdoor seating…"
-                            color="bg-white/10 text-gray-300"
-                        />
-                        <TagInput
-                            label="Food Categories"
-                            tags={identity.food_categories}
-                            onChange={(tags) => setIdentity({ ...identity, food_categories: tags })}
-                            placeholder="Main Course, Appetizers, Desserts…"
-                            color="bg-green-500/20 text-green-400"
-                        />
-                    </div>
-                )}
-
-                {/* STEP 3 — Branches */}
-                {step === 3 && (
-                    <div className="animate-fadeIn">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="text-lg font-bold text-white">Branches &amp; Locations</h3>
-                                <p className="text-sm text-gray-500">Add as many branches as you have. At least one is required.</p>
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1">Brand Visual Key (Logo)</label>
+                                <div className="p-8 bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 rounded-[2rem]">
+                                    <ImageUpload
+                                        value={basic.logo_url}
+                                        onChange={(url) => setBasic({ ...basic, logo_url: typeof url === 'string' ? url : url[0] || '' })}
+                                        multiple={false}
+                                        label="Official Entity Logo"
+                                    />
+                                </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={addBranch}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-gray-900 text-white rounded-xl hover:bg-cyan-400 transition-colors text-sm font-semibold shadow"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Add Branch
-                            </button>
                         </div>
-                        <div className="space-y-5 max-h-[480px] overflow-y-auto pr-1">
-                            {branches.map((branch, idx) => (
-                                <BranchCard
-                                    key={idx}
-                                    branch={branch}
-                                    index={idx}
-                                    onChange={updateBranch}
-                                    onRemove={removeBranch}
-                                    canRemove={branches.length > 1}
+                    )}
+
+                    {/* STEP 2 — Identity */}
+                    {step === 2 && (
+                        <div className="space-y-10 animate-fade-up">
+                            <div className="border-b border-gray-100 dark:border-white/5 pb-6">
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight uppercase">Taxonomy Alignment</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 italic font-medium opacity-80">Categorize your menu systems and specialties for AI discoverability.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                <TagInput
+                                    label="Cuisine Categories *"
+                                    tags={identity.categories}
+                                    onChange={(tags) => setIdentity({ ...identity, categories: tags })}
+                                    placeholder="Italian, Fast Food, etc."
                                 />
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {step === 4 && (
-                    <div className="animate-fadeIn">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="text-lg font-bold text-white">Review &amp; Export</h3>
-                                <p className="text-sm text-gray-500">Everything looks good? Download your profile or go live.</p>
+                                <TagInput
+                                    label="Network Specialties"
+                                    tags={identity.specialties}
+                                    onChange={(tags) => setIdentity({ ...identity, specialties: tags })}
+                                    placeholder="Wood-fired Pizza, etc."
+                                    color="bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/10"
+                                />
+                                <TagInput
+                                    label="Discovery Keywords"
+                                    tags={identity.keywords}
+                                    onChange={(tags) => setIdentity({ ...identity, keywords: tags })}
+                                    placeholder="family-friendly, rooftop..."
+                                    color="bg-purple-500/5 text-purple-600 dark:text-purple-400 border-purple-500/10"
+                                />
+                                <TagInput
+                                    label="Menu Domains"
+                                    tags={identity.food_categories}
+                                    onChange={(tags) => setIdentity({ ...identity, food_categories: tags })}
+                                    placeholder="Main Course, Appetizers..."
+                                    color="bg-green-500/5 text-green-600 dark:text-green-400 border-green-500/10"
+                                />
                             </div>
-                            <div className="flex gap-2">
+                        </div>
+                    )}
+
+                    {/* STEP 3 — Branches */}
+                    {step === 3 && (
+                        <div className="space-y-10 animate-fade-up">
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-6 border-b border-gray-100 dark:border-white/5 pb-6">
+                                <div>
+                                    <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight uppercase">Geographic Expansion</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 italic font-medium opacity-80">Integrate physical operational nodes into the network.</p>
+                                </div>
                                 <button
                                     type="button"
-                                    onClick={handleExportJSON}
-                                    className="flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 rounded-xl hover:bg-white/10 transition-colors text-sm font-medium border border-white/10"
+                                    onClick={addBranch}
+                                    className="px-8 py-3 bg-cyan-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-cyan-400 shadow-xl shadow-cyan-500/20 transition-all flex items-center gap-2"
                                 >
-                                    <FileJson className="w-4 h-4" />
-                                    JSON
+                                    <Plus className="w-4 h-4" />
+                                    Provision New Node
                                 </button>
+                            </div>
+
+                            <div className="space-y-8 max-h-[600px] overflow-y-auto pr-4 custom-scrollbar">
+                                {branches.map((branch, idx) => (
+                                    <BranchCard
+                                        key={idx}
+                                        branch={branch}
+                                        index={idx}
+                                        onChange={updateBranch}
+                                        onRemove={removeBranch}
+                                        canRemove={branches.length > 1}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 4 — Review */}
+                    {step === 4 && (
+                        <div className="space-y-10 animate-fade-up">
+                            <div className="border-b border-gray-100 dark:border-white/5 pb-6">
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight uppercase">Integrity Sync</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 italic font-medium opacity-80">Final verification before initializing the AI search engine sync.</p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-4 mb-4">
                                 <button
                                     type="button"
                                     onClick={handleExportPDF}
-                                    className="flex items-center gap-2 px-3 py-2 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors text-sm font-medium border border-red-200"
+                                    className="px-6 py-2.5 rounded-2xl bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:text-red-500 hover:bg-red-500/5 transition-all text-[10px] font-black uppercase tracking-widest border border-gray-200 dark:border-white/10 flex items-center gap-2"
                                 >
                                     <Download className="w-4 h-4" />
-                                    PDF
+                                    Export PDF
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleExportJSON}
+                                    className="px-6 py-2.5 rounded-2xl bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:text-cyan-500 hover:bg-cyan-500/5 transition-all text-[10px] font-black uppercase tracking-widest border border-gray-200 dark:border-white/10 flex items-center gap-2"
+                                >
+                                    <FileJson className="w-4 h-4" />
+                                    Export JSON
                                 </button>
                             </div>
+
+                            <div className="max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
+                                <ReviewPanel basic={basic} identity={identity} branches={branches} />
+                            </div>
+
+                            {/* RAG Status Messages */}
+                            <div className="space-y-4">
+                                {ragStatus === 'uploading' && (
+                                    <div className="flex items-center gap-4 px-6 py-4 bg-cyan-500/5 border border-cyan-500/10 rounded-2xl text-cyan-600 dark:text-cyan-400 text-[10px] font-black uppercase tracking-widest animate-pulse">
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        Synchronizing with AI Knowledge Base...
+                                    </div>
+                                )}
+                                {ragStatus === 'success' && (
+                                    <div className="flex items-center gap-4 px-6 py-4 bg-green-500/5 border border-green-500/10 rounded-2xl text-green-600 text-[10px] font-black uppercase tracking-widest">
+                                        <Check className="w-5 h-5" />
+                                        Core Synced: {ragChunks} neural nodes updated
+                                    </div>
+                                )}
+                                {ragStatus === 'failed' && (
+                                    <div className="flex items-center gap-4 px-6 py-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-amber-600 text-[10px] font-black uppercase tracking-widest">
+                                        <Eye className="w-5 h-5" />
+                                        Manual override required: RAG link inactive
+                                    </div>
+                                )}
+                            </div>
+
+                            {submitting && submitLabel && (
+                                <p className="text-center text-[10px] font-black uppercase tracking-[0.3em] text-cyan-500 animate-pulse">{submitLabel}</p>
+                            )}
                         </div>
+                    )}
+                </div>
 
-                        <div className="max-h-[380px] overflow-y-auto pr-1">
-                            <ReviewPanel basic={basic} identity={identity} branches={branches} />
-                        </div>
-
-                        {/* RAG Status Banner */}
-                        {ragStatus === 'uploading' && (
-                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-cyan-300 text-sm">
-                                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                                Uploading restaurant profile to AI knowledge base&hellip;
-                            </div>
-                        )}
-                        {ragStatus === 'success' && (
-                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-green-500/10 border border-green-200 rounded-xl text-green-400 text-sm">
-                                <Check className="w-4 h-4 flex-shrink-0" />
-                                ✅ AI knowledge base updated &mdash; <strong>{ragChunks} chunks</strong> stored. The chatbot can now answer questions about this restaurant.
-                            </div>
-                        )}
-                        {ragStatus === 'failed' && (
-                            <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
-                                <X className="w-4 h-4 flex-shrink-0" />
-                                ⚠️ AI indexing skipped &mdash; RAG server not reachable. Start it with <code className="bg-amber-100 px-1 rounded text-xs">cd Backend/RAG &amp;&amp; python main.py</code> and re-save.
-                            </div>
-                        )}
-
-                        {/* Submit progress label */}
-                        {submitting && submitLabel && (
-                            <p className="mt-3 text-center text-xs text-gray-500 animate-pulse">{submitLabel}</p>
-                        )}
-                    </div>
-                )}
-
-                {/* Navigation */}
-                <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
+                {/* Sticky Footer Actions */}
+                <div className="mt-auto pt-10 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
                     <button
                         type="button"
                         onClick={step === 1 ? onCancel : back}
-                        className="flex items-center gap-2 px-5 py-2.5 border-2 border-white/10 text-gray-300 rounded-xl hover:bg-[#050505] transition-colors font-medium"
+                        disabled={loading}
+                        className="px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all flex items-center gap-2 border border-transparent hover:border-gray-200 dark:hover:border-white/10"
                     >
                         <ChevronLeft className="w-4 h-4" />
-                        {step === 1 ? 'Cancel' : 'Back'}
+                        {step === 1 ? 'Discard' : 'Previous Phase'}
                     </button>
 
-                    {step < 4 ? (
-                        <button
-                            type="button"
-                            onClick={next}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-cyan-500 text-gray-900 text-white rounded-xl hover:bg-cyan-400 transition-colors font-semibold shadow-md"
-                        >
-                            Next
-                            <ChevronRight className="w-4 h-4" />
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
-                            disabled={submitting}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-500 text-white rounded-xl hover:from-blue-700 hover:to-indigo-600 transition-all font-semibold shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {submitting ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    {submitLabel || 'Processing…'}
-                                </>
-                            ) : (
-                                <>
-                                    <Check className="w-4 h-4" />
-                                    Create Restaurant
-                                </>
-                            )}
-                        </button>
-                    )}
+                    <div className="flex gap-4">
+                        {step === STEPS.length ? (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={submitting}
+                                className="px-12 py-3.5 bg-green-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-green-400 shadow-xl shadow-green-500/20 transition-all disabled:opacity-50 flex items-center gap-2 active:scale-95"
+                            >
+                                {submitting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Finalizing Sync...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        Initialize Network
+                                    </>
+                                )}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={next}
+                                className="px-12 py-3.5 bg-cyan-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-cyan-400 shadow-xl shadow-cyan-500/20 transition-all flex items-center gap-2 active:scale-95"
+                            >
+                                Proceed to Next
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Provider } from "react-redux";
 import { store } from "./store/store";
 import { AppProvider } from "./contexts/AppContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import Layout from "./components/Layout/Layout";
 import Home from "./pages/Home/Home";
 import Restaurants from "./pages/Restaurants/Restaurants";
@@ -24,7 +25,8 @@ import VoicePrompt from "./pages/Home/VoicePrompt";
 function App() {
   return (
     <Provider store={store}>
-      <AppProvider>
+      <ThemeProvider>
+        <AppProvider>
         <Router>
           <Routes>
             <Route path="/" element={<Layout />}>
@@ -68,7 +70,8 @@ function App() {
             />
           </Routes>
         </Router>
-      </AppProvider>
+        </AppProvider>
+      </ThemeProvider>
     </Provider>
   );
 }

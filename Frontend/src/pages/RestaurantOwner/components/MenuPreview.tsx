@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UtensilsCrossed, Clock, Flame, Leaf, AlertCircle } from 'lucide-react';
+import { UtensilsCrossed, Clock, Flame, Eye, ChevronRight, Loader2, Star } from 'lucide-react';
 import { apiService } from '../../../services/api';
 
 interface MenuItem {
@@ -49,21 +49,15 @@ const MenuPreview: React.FC<MenuPreviewProps> = ({ restaurantId }) => {
     setLoading(true);
     setError('');
     try {
-      // Load categories
       const categoriesResponse = await apiService.getCategories(restaurantId, { is_active: true });
       if (categoriesResponse.success && categoriesResponse.data) {
-        const cats = Array.isArray(categoriesResponse.data) 
-          ? categoriesResponse.data 
-          : categoriesResponse.data.items || [];
+        const cats = Array.isArray(categoriesResponse.data) ? categoriesResponse.data : (categoriesResponse.data as any).items || [];
         setCategories(cats.filter((c: Category) => c.is_active));
       }
 
-      // Load menu items
       const itemsResponse = await apiService.getMenuItems(restaurantId, { is_available: true });
       if (itemsResponse.success && itemsResponse.data) {
-        const items = Array.isArray(itemsResponse.data) 
-          ? itemsResponse.data 
-          : itemsResponse.data.items || [];
+        const items = Array.isArray(itemsResponse.data) ? itemsResponse.data : (itemsResponse.data as any).items || [];
         setMenuItems(items.filter((item: MenuItem) => item.is_available));
       }
     } catch (err: any) {
@@ -75,19 +69,12 @@ const MenuPreview: React.FC<MenuPreviewProps> = ({ restaurantId }) => {
 
   const getSpiceLevelColor = (level?: string) => {
     switch (level) {
-      case 'mild': return 'text-green-500 bg-green-500/10';
-      case 'medium': return 'text-yellow-500 bg-yellow-500/10';
-      case 'hot': return 'text-orange-500 bg-orange-500/10';
-      case 'extra-hot': return 'text-red-500 bg-red-500/10';
-      default: return 'text-gray-400 bg-[#050505]';
+      case 'mild': return 'text-green-600/70 border-green-600/10';
+      case 'medium': return 'text-yellow-600/70 border-yellow-600/10';
+      case 'hot': return 'text-orange-600/70 border-orange-600/10';
+      case 'extra-hot': return 'text-red-600/70 border-red-600/10';
+      default: return 'text-gray-400 border-transparent';
     }
-  };
-
-  const getSpiceLevelIcon = (level?: string) => {
-    if (level === 'hot' || level === 'extra-hot') {
-      return <Flame className="w-3 h-3" />;
-    }
-    return null;
   };
 
   const filteredItems = selectedCategory
@@ -98,225 +85,188 @@ const MenuPreview: React.FC<MenuPreviewProps> = ({ restaurantId }) => {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-400">Loading menu preview...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-200 rounded-lg p-4 text-red-400">
-        {error}
+      <div className="flex flex-col items-center justify-center py-24 animate-fade-in bg-[#FCFBF7] dark:bg-[#080808] rounded-[3rem]">
+        <div className="relative">
+          <Loader2 className="w-16 h-16 text-amber-600/40 animate-spin" />
+          <UtensilsCrossed className="w-6 h-6 text-amber-600/60 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+        </div>
+        <p className="mt-6 text-xs font-serif italic text-amber-900/40 dark:text-amber-100/20 tracking-[0.2em] uppercase">Curating Digital Menu Experience...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h3 className="text-2xl font-bold text-white mb-2">Menu Preview</h3>
-        <p className="text-gray-400">This is how your menu appears to customers</p>
+    <div className="animate-fade-in space-y-12 max-w-7xl mx-auto px-4 md:px-0">
+      {/* Header Section — Restored Standard Styling */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white dark:bg-[#161616] p-10 rounded-[2.5rem] border border-gray-200 dark:border-white/5 shadow-sm relative overflow-hidden">
+        <div className="flex items-center gap-6">
+          <div className="p-4 rounded-[1.5rem] bg-amber-500/10 text-amber-500">
+            <Eye className="w-8 h-8" />
+          </div>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-0 tracking-tight">Digital Menu Preview</h3>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-green-600">Live View</span>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Experience your menu exactly as your patrons do across all digital touchpoints</p>
+          </div>
+        </div>
       </div>
 
-      {/* Category Filter */}
-      {rootCategories.length > 0 && (
-        <div className="mb-6 bg-[#111] border border-white/5 rounded-lg shadow p-4">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedCategory === null
-                  ? 'bg-cyan-500 text-gray-900 text-white'
-                  : 'bg-white/5 text-gray-300 hover:bg-white/10'
-              }`}
-            >
-              All Items
-            </button>
-            {rootCategories.map((category) => (
-              <button
-                key={category.category_id}
-                onClick={() => setSelectedCategory(category.category_id)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  selectedCategory === category.category_id
-                    ? 'bg-cyan-500 text-gray-900 text-white'
-                    : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                }`}
-              >
-                {category.name}
-              </button>
-            ))}
-          </div>
+      {error && (
+        <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest text-center shadow-inner">
+          {error}
         </div>
       )}
 
-      {/* Menu Items by Category */}
-      {rootCategories.length === 0 ? (
-        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-12 text-center">
-          <UtensilsCrossed className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">No menu items available yet</p>
-          <p className="text-gray-500 text-sm mt-2">Add categories and menu items to see them here</p>
+      {/* Category Navigation - Elegant Minimal Tabs */}
+      {rootCategories.length > 0 && (
+        <div className="flex items-center justify-center gap-12 overflow-x-auto pb-4 scrollbar-hide border-b border-gray-100 dark:border-white/5">
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className={`group relative pb-6 text-[11px] font-black uppercase tracking-[0.25em] transition-all whitespace-nowrap ${
+              selectedCategory === null
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            Full Menu
+            {selectedCategory === null && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600 dark:bg-amber-400 rounded-full shadow-[0_-4px_10px_rgba(217,119,6,0.2)]" />
+            )}
+          </button>
+          {rootCategories.map((category) => (
+            <button
+              key={category.category_id}
+              onClick={() => setSelectedCategory(category.category_id)}
+              className={`group relative pb-6 text-[11px] font-black uppercase tracking-[0.25em] transition-all whitespace-nowrap ${
+                selectedCategory === category.category_id
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {category.name}
+              {selectedCategory === category.category_id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600 dark:bg-amber-400 rounded-full shadow-[0_-4px_10px_rgba(217,119,6,0.2)]" />
+              )}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="space-y-8">
-          {rootCategories.map((category) => {
-            const categoryItems = filteredItems.filter(
-              item => item.category_id === category.category_id
-            );
+      )}
 
-            if (selectedCategory && selectedCategory !== category.category_id) {
-              return null;
-            }
+      {/* Dining Surface */}
+      <div className="bg-[#FCFBF7] dark:bg-[#0A0A0A] rounded-[4rem] p-10 md:p-20 shadow-inner border border-gray-100 dark:border-white/5 min-h-[800px] relative">
+        {/* Background Texture Overlay */}
+        <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.01] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
 
-            if (categoryItems.length === 0 && selectedCategory === category.category_id) {
+        {rootCategories.length === 0 ? (
+          <div className="relative z-10 flex flex-col items-center justify-center py-40">
+            <UtensilsCrossed className="w-16 h-16 text-amber-900/10 dark:text-amber-100/10 mb-8" />
+            <h4 className="text-2xl font-serif italic text-amber-900/20 dark:text-amber-100/20">Menu Under Curation</h4>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-900/10 dark:text-amber-100/10 mt-2">Add categories and assets to begin</p>
+          </div>
+        ) : (
+          <div className="relative z-10 space-y-32">
+            {rootCategories.map((category) => {
+              const categoryItems = filteredItems.filter(item => item.category_id === category.category_id);
+              if (selectedCategory && selectedCategory !== category.category_id) return null;
+              if (categoryItems.length === 0 && !selectedCategory) return null;
+
               return (
-                <div key={category.category_id} className="bg-[#111] border border-white/5 rounded-lg shadow p-8 text-center">
-                  <p className="text-gray-400">No items in this category yet</p>
-                </div>
-              );
-            }
+                <div key={category.category_id} className="animate-fade-up">
+                  {/* Category Header */}
+                  <div className="flex flex-col items-center mb-16 text-center">
+                    <div className="w-12 h-[1px] bg-amber-600/30 dark:bg-amber-400/20 mb-6" />
+                    <h4 className="text-4xl md:text-5xl font-serif text-gray-900 dark:text-white italic tracking-tight">{category.name}</h4>
+                    {category.description && (
+                      <p className="mt-4 text-xs font-serif italic text-gray-400 dark:text-gray-500 max-w-md">{category.description}</p>
+                    )}
+                  </div>
 
-            if (categoryItems.length === 0) {
-              return null;
-            }
-
-            return (
-              <div key={category.category_id} className="bg-[#111] border border-white/5 rounded-lg shadow overflow-hidden">
-                {/* Category Header */}
-                <div className="bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 px-6 py-4 border-b">
-                  <h4 className="text-xl font-bold text-white">{category.name}</h4>
-                  {category.description && (
-                    <p className="text-sm text-gray-400 mt-1">{category.description}</p>
-                  )}
-                </div>
-
-                {/* Menu Items Grid */}
-                <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Boutique List - Elegant Rows */}
+                  <div className="space-y-0 max-w-4xl mx-auto">
                     {categoryItems.map((item) => {
-                      const price = typeof item.base_price === 'number' 
-                        ? item.base_price 
-                        : parseFloat(item.base_price || '0');
+                      const price = typeof item.base_price === 'number' ? item.base_price : parseFloat(item.base_price || '0');
 
                       return (
-                        <div
-                          key={item.item_id}
-                          className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow"
-                        >
-                          {/* Item Image */}
+                        <div key={item.item_id} className="group py-10 border-b border-amber-900/5 dark:border-amber-100/5 last:border-0 flex flex-col md:flex-row gap-10 items-start md:items-center">
+                          {/* Left: Image if exists */}
                           {item.image_urls && item.image_urls.length > 0 && (
-                            <div className="relative h-48 bg-white/10">
+                            <div className="w-full md:w-32 h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg group-hover:scale-105 transition-all duration-500 border border-white/10">
                               <img
                                 src={item.image_urls[0]}
                                 alt={item.name}
                                 className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display = 'none';
-                                }}
                               />
-                              {item.is_featured && (
-                                <div className="absolute top-2 right-2 bg-yellow-500 text-white px-2 py-1 rounded text-xs font-bold">
-                                  Featured
-                                </div>
-                              )}
                             </div>
                           )}
 
-                          {/* Item Details */}
-                          <div className="p-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <h5 className="text-lg font-semibold text-white">{item.name}</h5>
-                              <span className="text-lg font-bold text-cyan-400">
-                                {item.currency || 'USD'} {price.toFixed(2)}
+                          {/* Middle: Name & Description */}
+                          <div className="flex-1 space-y-4">
+                            <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-4">
+                              <div className="flex items-center gap-4">
+                                <h5 className="text-2xl font-serif text-gray-900 dark:text-white italic tracking-tight group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                                  {item.name}
+                                </h5>
+                                {item.is_featured && (
+                                  <span className="p-1.5 rounded-full bg-amber-500/10 text-amber-500">
+                                    <Star className="w-3 h-3 fill-current" />
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-lg font-sans text-gray-900 dark:text-amber-400/80 font-medium tracking-tight whitespace-nowrap">
+                                <span className="text-[10px] font-black mr-1 opacity-40">{item.currency || 'USD'}</span>
+                                {price.toFixed(2)}
                               </span>
                             </div>
 
-                            <p className="text-sm text-gray-400 mb-3 line-clamp-2">{item.description}</p>
+                            <p className="text-[13px] text-gray-500 dark:text-gray-400 leading-relaxed font-serif italic max-w-xl opacity-80">
+                              {item.description}
+                            </p>
 
-                            {/* Tags and Info */}
-                            <div className="flex flex-wrap gap-2 mb-3">
+                            <div className="flex flex-wrap gap-6 pt-2">
                               {item.spice_level && (
-                                <span className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 ${getSpiceLevelColor(item.spice_level)}`}>
-                                  {getSpiceLevelIcon(item.spice_level)}
+                                <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${getSpiceLevelColor(item.spice_level)}`}>
+                                  <Flame className="w-3.5 h-3.5" />
                                   {item.spice_level}
-                                </span>
+                                </div>
                               )}
                               {item.preparation_time && (
-                                <span className="px-2 py-1 text-xs bg-white/5 text-gray-300 rounded-full flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {item.preparation_time} min
-                                </span>
-                              )}
-                              {item.calories && (
-                                <span className="px-2 py-1 text-xs bg-white/5 text-gray-300 rounded-full">
-                                  {item.calories} cal
-                                </span>
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                  <Clock className="w-3.5 h-3.5 opacity-40" />
+                                  {item.preparation_time} Min
+                                </div>
                               )}
                             </div>
-
-                            {/* Dietary Tags */}
-                            {item.dietary_tags && item.dietary_tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {item.dietary_tags.map((tag, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded-full flex items-center gap-1"
-                                  >
-                                    <Leaf className="w-3 h-3" />
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Allergens Warning */}
-                            {item.allergens && item.allergens.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-white/10">
-                                <div className="flex items-start gap-1">
-                                  <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                                  <div>
-                                    <p className="text-xs font-medium text-orange-500">Contains:</p>
-                                    <p className="text-xs text-gray-400">
-                                      {item.allergens.join(', ')}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Ingredients */}
-                            {item.ingredients && item.ingredients.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-white/10">
-                                <p className="text-xs font-medium text-gray-300 mb-1">Ingredients:</p>
-                                <p className="text-xs text-gray-400">
-                                  {item.ingredients.join(', ')}
-                                </p>
-                              </div>
-                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
 
-      {/* Empty State */}
-      {filteredItems.length === 0 && categories.length > 0 && (
-        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-12 text-center">
-          <UtensilsCrossed className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">No menu items available</p>
-          <p className="text-gray-500 text-sm mt-2">Add menu items to see them in the preview</p>
-        </div>
-      )}
+            {/* Bottom Branding */}
+            <div className="pt-20 border-t border-amber-900/5 dark:border-amber-100/5 flex flex-col items-center">
+              <div className="p-4 rounded-full bg-amber-500/5 mb-6">
+                <UtensilsCrossed className="w-8 h-8 text-amber-600/30" />
+              </div>
+              <p className="text-[10px] font-black text-amber-900/20 dark:text-amber-100/10 uppercase tracking-[0.5em]">The Art of Dining by VOCABITE</p>
+              
+              <button className="mt-12 group flex items-center gap-4 px-10 py-4 bg-gray-900 dark:bg-amber-400 text-white dark:text-gray-900 rounded-full transition-all hover:scale-105 active:scale-95 shadow-xl">
+                 <span className="text-[11px] font-black uppercase tracking-[0.2em]">Consumer Experience Sync</span>
+                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
 export default MenuPreview;
-

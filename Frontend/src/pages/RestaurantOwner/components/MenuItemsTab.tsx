@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, UtensilsCrossed, Filter } from 'lucide-react';
+import { Plus, Edit, Trash2, UtensilsCrossed, Filter, Loader2, Star, Clock, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import MenuItemForm from './MenuItemForm';
 
@@ -40,6 +40,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
   const [editingItem, setEditingItem] = useState<MenuItem | undefined>();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [availabilityFilter, setAvailabilityFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const hasLoaded = React.useRef(false);
 
@@ -54,7 +55,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
     try {
       const response = await apiService.getCategories(restaurantId);
       if (response.success && response.data) {
-        const cats = Array.isArray(response.data) ? response.data : response.data.items || [];
+        const cats = Array.isArray(response.data) ? response.data : (response.data as any).items || [];
         setCategories(cats);
       }
     } catch (err) {
@@ -68,7 +69,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
     try {
       const response = await apiService.getMenuItems(restaurantId);
       if (response.success && response.data) {
-        const items = Array.isArray(response.data) ? response.data : response.data.items || [];
+        const items = Array.isArray(response.data) ? response.data : (response.data as any).items || [];
         setMenuItems(items);
       }
     } catch (err: any) {
@@ -79,7 +80,7 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!confirm('Are you sure you want to delete this menu item? This action cannot be undone.')) {
+    if (!confirm('This action will permanently purge this item from the repository. Proceed?')) {
       return;
     }
     try {
@@ -109,156 +110,169 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
     if (selectedCategory !== 'all' && item.category_id !== selectedCategory) return false;
     if (availabilityFilter === 'available' && !item.is_available) return false;
     if (availabilityFilter === 'unavailable' && item.is_available) return false;
+    if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
 
   if (loading && menuItems.length === 0) {
     return (
-      <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-400">Loading menu items...</p>
+      <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+        <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mb-4" />
+        <p className="text-gray-400 font-medium tracking-widest uppercase text-xs">Loading Menu Items...</p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h3 className="text-xl font-semibold">Menu Items</h3>
-          <p className="text-sm text-gray-400 mt-1">Manage your restaurant menu items</p>
+    <div className="animate-fade-in space-y-6 max-w-[1600px] mx-auto">
+      {/* Header Section - Compact */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-[#161616] p-6 rounded-[1.5rem] border border-gray-200 dark:border-white/5 shadow-sm">
+        <div className="flex items-center gap-4">
+           <div className="p-3 bg-cyan-500/10 text-cyan-500 rounded-xl">
+             <UtensilsCrossed className="w-5 h-5" />
+           </div>
+           <div>
+             <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Catalog</h3>
+             <p className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-widest">Digital Assets: {menuItems.length}</p>
+           </div>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400"
-        >
-          <Plus className="w-4 h-4" />
-          Add Menu Item
-        </button>
+        
+        <div className="flex flex-1 max-w-xl items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text"
+              placeholder="Search Menu..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 rounded-full text-xs font-medium outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+            />
+          </div>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-6 py-2.5 bg-cyan-500 text-white rounded-full font-bold text-[10px] tracking-widest uppercase transition-all hover:scale-105 shadow-lg shadow-cyan-500/20 whitespace-nowrap"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Asset
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-500/10 border border-red-200 rounded-lg text-red-400">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[10px] font-bold tracking-widest uppercase text-center">
           {error}
         </div>
       )}
 
-      {/* Filters */}
-      <div className="bg-[#111] border border-white/5 rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-300">Filters:</span>
+      {/* Filters Toolbar - Compact */}
+      <div className="flex items-center gap-4 p-4 bg-white dark:bg-[#161616] rounded-xl border border-gray-200 dark:border-white/5 shadow-sm overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-white/10 flex-shrink-0">
+          <Filter className="w-3.5 h-3.5 text-cyan-500 ml-1" />
+          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Filter Matrix</span>
         </div>
-        <div>
-          <label className="text-sm text-gray-400 mr-2">Category:</label>
+        <div className="flex gap-3">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
+            className="px-3 py-1.5 bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/5 rounded-lg text-[10px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-cyan-500/20 cursor-pointer"
           >
-            <option value="all">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat.category_id} value={cat.category_id}>
-                {cat.name}
-              </option>
-            ))}
+            <option value="all">Categories: All</option>
+            {categories.map((cat) => <option key={cat.category_id} value={cat.category_id}>{cat.name}</option>)}
           </select>
-        </div>
-        <div>
-          <label className="text-sm text-gray-400 mr-2">Availability:</label>
           <select
             value={availabilityFilter}
             onChange={(e) => setAvailabilityFilter(e.target.value)}
-            className="px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
+            className="px-3 py-1.5 bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/5 rounded-lg text-[10px] font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-cyan-500/20 cursor-pointer"
           >
-            <option value="all">All</option>
-            <option value="available">Available</option>
-            <option value="unavailable">Unavailable</option>
+            <option value="all">Status: All</option>
+            <option value="available">Live</option>
+            <option value="unavailable">Draft</option>
           </select>
         </div>
       </div>
 
       {filteredItems.length === 0 ? (
-        <div className="bg-[#111] border border-white/5 rounded-lg shadow p-8 text-center">
-          <UtensilsCrossed className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-400 mb-4">
-            {menuItems.length === 0 
-              ? 'No menu items yet. Create your first menu item to get started.'
-              : 'No menu items match your filters.'}
-          </p>
-          {menuItems.length === 0 && (
-            <button
-              onClick={handleCreate}
-              className="px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400"
-            >
-              Create Menu Item
-            </button>
-          )}
+        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-[#161616] border border-dashed border-gray-200 dark:border-white/10 rounded-[2rem]">
+          <UtensilsCrossed className="w-10 h-10 text-gray-200 dark:text-gray-700 mb-4" />
+          <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">No assets found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5 pb-12 transition-all">
           {filteredItems.map((item) => {
             const category = categories.find(c => c.category_id === item.category_id);
+            const price = typeof item.base_price === 'number' ? item.base_price : parseFloat(item.base_price || '0');
+            
             return (
-              <div key={item.item_id} className="bg-[#111] border border-white/5 rounded-lg shadow p-4">
-                {item.image_urls && item.image_urls.length > 0 && (
-                  <img
-                    src={item.image_urls[0]}
-                    alt={item.name}
-                    className="w-full h-32 object-cover rounded-lg mb-3"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                )}
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="font-semibold text-lg">{item.name}</h4>
-                  <div className="flex gap-1">
-                    {item.is_featured && (
-                      <span className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded-full">Featured</span>
-                    )}
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      item.is_available ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-gray-200'
-                    }`}>
-                      {item.is_available ? 'Available' : 'Unavailable'}
-                    </span>
-                  </div>
-                </div>
-                {category && (
-                  <p className="text-xs text-gray-500 mb-2">{category.name}</p>
-                )}
-                <p className="text-sm text-gray-400 mb-2 line-clamp-2">{item.description}</p>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-lg font-bold text-cyan-400">
-                    {item.currency || 'USD'} {typeof item.base_price === 'number' ? item.base_price.toFixed(2) : parseFloat(item.base_price || '0').toFixed(2)}
-                  </span>
-                  {item.preparation_time && (
-                    <span className="text-xs text-gray-500">{item.preparation_time} min</span>
+              <div key={item.item_id} className="group flex flex-col bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/5 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300">
+                {/* Image Container - Reduced Height (30%) */}
+                <div className="relative h-28 overflow-hidden bg-gray-100 dark:bg-white/5 flex-shrink-0">
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors z-10" />
+                  {item.image_urls && item.image_urls.length > 0 ? (
+                    <img
+                      src={item.image_urls[0]}
+                      alt={item.name}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center opacity-10">
+                      <UtensilsCrossed className="w-8 h-8" />
+                    </div>
                   )}
-                </div>
-                {item.dietary_tags && item.dietary_tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {item.dietary_tags.slice(0, 3).map((tag, idx) => (
-                      <span key={idx} className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded">
-                        {tag}
-                      </span>
-                    ))}
+                  {/* Overlay Badges - Smaller */}
+                  <div className="absolute top-2 left-2 flex flex-col gap-1 z-20">
+                    {item.is_featured && (
+                      <div className="p-1.5 bg-yellow-500 text-white rounded-full shadow-lg">
+                        <Star className="w-2.5 h-2.5 fill-current" />
+                      </div>
+                    )}
+                    <div className={`w-2 h-2 rounded-full shadow-lg border border-white/20 ${item.is_available ? 'bg-green-500' : 'bg-gray-500'}`} />
                   </div>
-                )}
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="flex-1 px-3 py-2 bg-cyan-500/10 text-cyan-400 rounded-lg hover:bg-cyan-500/20 flex items-center justify-center gap-2 text-sm"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.item_id)}
-                    className="px-3 py-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 flex items-center justify-center gap-2 text-sm"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                </div>
+
+                <div className="p-4 flex flex-col flex-1">
+                  <div className="mb-1">
+                    <h4 className="font-bold text-sm text-gray-900 dark:text-white truncate" title={item.name}>{item.name}</h4>
+                    {category && (
+                      <span className="text-[8px] font-black text-cyan-500 uppercase tracking-widest">
+                        {category.name}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3 leading-tight line-clamp-2 h-7 font-serif italic opacity-70">
+                    {item.description}
+                  </p>
+
+                  <div className="flex items-center justify-between mb-4 mt-auto pt-2 border-t border-gray-50 dark:border-white/5">
+                    <div>
+                      <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest block">Price</span>
+                      <span className="text-sm font-black text-gray-900 dark:text-white">
+                        {price.toFixed(2)} <span className="text-[8px] opacity-40 ml-0.5">{item.currency || 'USD'}</span>
+                      </span>
+                    </div>
+                    {item.preparation_time && (
+                      <div className="flex items-center gap-1 text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                        <Clock className="w-3 h-3 text-cyan-500" />
+                        {item.preparation_time}m
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-black text-[9px] tracking-widest uppercase transition-all hover:scale-[1.02] active:scale-95"
+                    >
+                      <Edit className="w-3 h-3" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.item_id)}
+                      className="p-2 bg-red-500/5 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-red-500/10"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -279,4 +293,3 @@ const MenuItemsTab: React.FC<MenuItemsTabProps> = ({ restaurantId }) => {
 };
 
 export default MenuItemsTab;
-

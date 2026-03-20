@@ -12,13 +12,13 @@ import { setFilters } from "../../store/slices/restaurantsSlice";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Custom VOCABITELogo Component
-export const VOCABITELogo: React.FC = () => {
+export const VOCABITELogo: React.FC<{ className?: string }> = ({ className = "" }) => {
   return (
     <div
-      className="flex items-center text-2xl sm:text-3xl font-extrabold tracking-tight group"
+      className={`flex items-center text-2xl sm:text-3xl font-extrabold tracking-tight group ${className}`}
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      <span className="text-white group-hover:text-cyan-400 transition-colors duration-300">V</span>
+      <span className="group-hover:text-cyan-400 transition-colors duration-300">V</span>
 
       {/* Microphone Icon */}
       <div className="mx-1 relative">
@@ -29,7 +29,7 @@ export const VOCABITELogo: React.FC = () => {
         </span>
       </div>
 
-      <span className="text-white group-hover:text-cyan-400 transition-colors duration-300">CABITE</span>
+      <span className="group-hover:text-cyan-400 transition-colors duration-300">CABITE</span>
     </div>
   );
 };
@@ -99,7 +99,7 @@ const Header: React.FC = () => {
           <div className="flex items-center justify-between h-20 lg:h-24">
 
             {/* Logo */}
-            <Link to="/" className="flex items-center group relative z-10">
+            <Link to="/" className="flex items-center group relative z-10 text-white">
               <VOCABITELogo />
               <div className="ml-4 hidden sm:block">
                 <div className="text-[10px] font-bold text-cyan-400 tracking-widest uppercase bg-cyan-500/10 px-2 py-1 rounded-md border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.1)] group-hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-shadow">

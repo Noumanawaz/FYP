@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import ImageUpload from '../../../components/Common/ImageUpload';
+import Modal from '../../../components/Common/Modal';
 
 interface Category {
   category_id: string;
@@ -39,7 +40,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
     try {
       const response = await apiService.getCategories(restaurantId);
       if (response.success && response.data) {
-        const cats = Array.isArray(response.data) ? response.data : response.data.items || [];
+        const cats = Array.isArray(response.data) ? response.data : (response.data as any).items || [];
         setCategories(cats.filter((c: Category) => c.category_id !== category?.category_id));
       }
     } catch (err) {
@@ -76,45 +77,71 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[#111] border border-white/5 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">{category ? 'Edit Category' : 'Create Category'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-400">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+  const inputClasses = "w-full px-5 py-3.5 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm active:scale-[0.99] focus:bg-white dark:focus:bg-[#1A1A1A]";
+  const labelClasses = "text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1 mb-2 block";
 
+  const formFooter = (
+    <div className="flex gap-4">
+      <button
+        type="button"
+        onClick={onClose}
+        className="flex-1 px-6 py-3 border border-gray-200 dark:border-white/10 rounded-2xl font-bold text-[10px] tracking-widest uppercase text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-all outline-none"
+      >
+        Discard
+      </button>
+      <button
+        onClick={handleSubmit}
+        disabled={loading}
+        className="flex-1 px-8 py-3 bg-cyan-500 text-white rounded-2xl font-bold text-[10px] tracking-widest uppercase hover:bg-cyan-400 shadow-lg shadow-cyan-500/20 transition-all outline-none disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {loading ? (
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+        ) : (
+          <Save className="w-4 h-4" />
+        )}
+        {category ? 'Sync Category' : 'Create Category'}
+      </button>
+    </div>
+  );
+
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={category ? 'Update Taxonomy' : 'New Menu Category'}
+      footer={formFooter}
+      maxWidth="max-w-2xl"
+    >
+      <form onSubmit={handleSubmit} className="space-y-8">
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-200 rounded-lg text-red-400 text-sm">
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-[10px] font-bold uppercase tracking-widest">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Category Name *</label>
+            <label className={labelClasses}>Category Designation *</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-              placeholder="e.g., Appetizers, Main Course, Desserts"
+              className={inputClasses}
+              placeholder="e.g. Signature Main Courses"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Parent Category (Optional)</label>
+            <label className={labelClasses}>Hierarchical Parent</label>
             <select
               value={formData.parent_category_id}
               onChange={(e) => setFormData({ ...formData, parent_category_id: e.target.value })}
-              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
+              className={inputClasses}
             >
-              <option value="">None (Root Category)</option>
+              <option value="" className="dark:bg-[#121212]">Root Architectural Level</option>
               {categories.map((cat) => (
-                <option key={cat.category_id} value={cat.category_id}>
+                <option key={cat.category_id} value={cat.category_id} className="dark:bg-[#121212]">
                   {cat.name}
                 </option>
               ))}
@@ -122,58 +149,38 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ restaurantId, category, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+            <label className={labelClasses}>Functional Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-              placeholder="Brief description of this category..."
+              className={`${inputClasses} resize-none`}
+              placeholder="Primary purpose of this classification..."
             />
           </div>
 
-          <div>
-            <ImageUpload
-              value={formData.image_url}
-              onChange={(url) => setFormData({ ...formData, image_url: typeof url === 'string' ? url : url[0] || '' })}
-              multiple={false}
-              label="Category Image"
-            />
-          </div>
+          <ImageUpload
+            value={formData.image_url}
+            onChange={(url) => setFormData({ ...formData, image_url: typeof url === 'string' ? url : url[0] || '' })}
+            multiple={false}
+            label="Category Key Visual"
+          />
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-3 cursor-pointer group px-1">
             <input
               type="checkbox"
               id="is_active"
               checked={formData.is_active}
               onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              className="w-4 h-4 text-cyan-400 border-[rgba(255,255,255,0.2)] rounded focus:ring-cyan-500/50"
+              className="w-5 h-5 rounded-lg border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-cyan-500 focus:ring-cyan-500/20 transition-all cursor-pointer"
             />
-            <label htmlFor="is_active" className="ml-2 text-sm text-gray-300">
-              Active (visible to customers)
+            <label htmlFor="is_active" className="text-sm font-bold text-gray-500 group-hover:text-cyan-500 transition-colors uppercase tracking-widest text-[10px] cursor-pointer">
+              Active Transmission Status
             </label>
           </div>
-
-          <div className="flex gap-4 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg hover:bg-[#050505]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              {loading ? 'Saving...' : category ? 'Update' : 'Create'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+    </Modal>
   );
 };
 

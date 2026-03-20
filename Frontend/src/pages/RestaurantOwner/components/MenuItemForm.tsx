@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2 } from 'lucide-react';
+import { X, Save, Plus } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import ImageUpload from '../../../components/Common/ImageUpload';
+import Modal from '../../../components/Common/Modal';
 
 interface MenuItem {
   item_id: string;
@@ -67,7 +68,7 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
     try {
       const response = await apiService.getCategories(restaurantId);
       if (response.success && response.data) {
-        const cats = Array.isArray(response.data) ? response.data : response.data.items || [];
+        const cats = Array.isArray(response.data) ? response.data : (response.data as any).items || [];
         setCategories(cats);
       }
     } catch (err) {
@@ -147,35 +148,62 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
     setFormData({ ...formData, allergens: formData.allergens.filter((_, i) => i !== index) });
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-[#111] border border-white/5 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">{menuItem ? 'Edit Menu Item' : 'Create Menu Item'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-400">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+  const inputClasses = "w-full px-5 py-3.5 rounded-2xl bg-gray-50/50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all text-gray-900 dark:text-white font-medium shadow-sm active:scale-[0.99] focus:bg-white dark:focus:bg-[#1A1A1A]";
+  const labelClasses = "text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] ml-1 mb-2 block";
 
+  const formFooter = (
+    <div className="flex gap-4">
+      <button
+        type="button"
+        onClick={onClose}
+        className="flex-1 px-6 py-3 border border-gray-200 dark:border-white/10 rounded-2xl font-bold text-[10px] tracking-widest uppercase text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5 transition-all outline-none"
+      >
+        Discard Changes
+      </button>
+      <button
+        onClick={handleSubmit}
+        disabled={loading}
+        className="flex-1 px-8 py-3 bg-cyan-500 text-white rounded-2xl font-bold text-[10px] tracking-widest uppercase hover:bg-cyan-400 shadow-lg shadow-cyan-500/20 transition-all outline-none disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {loading ? (
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+        ) : (
+          <Save className="w-4 h-4" />
+        )}
+        {menuItem ? 'Sync Updates' : 'Commit Item'}
+      </button>
+    </div>
+  );
+
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={menuItem ? 'Update Menu Item' : 'New Culinary Asset'}
+      footer={formFooter}
+      maxWidth="max-w-4xl"
+    >
+      <form onSubmit={handleSubmit} className="space-y-8">
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-200 rounded-lg text-red-400 text-sm">
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-[10px] font-bold uppercase tracking-widest">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Essential Info Section */}
+        <section className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
+              <label className={labelClasses}>Primary Category *</label>
               <select
                 required
                 value={formData.category_id}
                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
+                className={inputClasses}
               >
-                <option value="">Select a category</option>
+                <option value="" className="dark:bg-[#121212]">Select Architecture</option>
                 {categories.map((cat) => (
-                  <option key={cat.category_id} value={cat.category_id}>
+                  <option key={cat.category_id} value={cat.category_id} className="dark:bg-[#121212]">
                     {cat.name}
                   </option>
                 ))}
@@ -183,43 +211,40 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Item Name *</label>
+              <label className={labelClasses}>Item Name *</label>
               <input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                placeholder="e.g., Margherita Pizza"
+                className={inputClasses}
+                placeholder="e.g. Signature Truffle Pizza"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Description *</label>
+            <label className={labelClasses}>Description & Ingredients Note *</label>
             <textarea
               required
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-              placeholder="Describe the menu item..."
+              className={`${inputClasses} resize-none`}
+              placeholder="Detailed culinary description..."
             />
           </div>
+        </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Logistics & Valuation Section */}
+        <section className="space-y-6 pt-6 border-t border-gray-100 dark:border-white/5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Base Price *</label>
-              <div className="flex">
-                <select
-                  value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                  className="px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-l-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                >
-                  <option value="USD">USD</option>
-                  <option value="PKR">PKR</option>
-                  <option value="EUR">EUR</option>
-                </select>
+              <label className={labelClasses}>Price *</label>
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-bold border-r border-gray-200 dark:border-white/10 pr-3">
+                  {formData.currency}
+                </div>
                 <input
                   type="number"
                   required
@@ -227,213 +252,182 @@ const MenuItemForm: React.FC<MenuItemFormProps> = ({ restaurantId, menuItem, onC
                   min="0"
                   value={formData.base_price}
                   onChange={(e) => setFormData({ ...formData, base_price: e.target.value })}
-                  className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] border-l-0 rounded-r-lg focus:ring-2 focus:ring-cyan-500/50"
+                  className={`${inputClasses} pl-16`}
                   placeholder="0.00"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Preparation Time (minutes)</label>
+              <label className={labelClasses}>Prep Cycle (Mins)</label>
               <input
                 type="number"
                 min="0"
                 value={formData.preparation_time}
                 onChange={(e) => setFormData({ ...formData, preparation_time: e.target.value })}
-                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                placeholder="e.g., 15"
+                className={inputClasses}
+                placeholder="e.g. 15"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Calories</label>
+              <label className={labelClasses}>Caloric Profile</label>
               <input
                 type="number"
                 min="0"
                 value={formData.calories}
                 onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-                className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-                placeholder="e.g., 350"
+                className={inputClasses}
+                placeholder="e.g. 350"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Spice Level</label>
-            <select
-              value={formData.spice_level}
-              onChange={(e) => setFormData({ ...formData, spice_level: e.target.value as any })}
-              className="w-full px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50 bg-[#111] text-white"
-            >
-              <option value="mild">Mild</option>
-              <option value="medium">Medium</option>
-              <option value="hot">Hot</option>
-              <option value="extra-hot">Extra Hot</option>
-            </select>
-          </div>
-
-          <div>
-            <ImageUpload
-              value={formData.image_urls}
-              onChange={(urls) => setFormData({ ...formData, image_urls: Array.isArray(urls) ? urls : [urls] })}
-              multiple={true}
-              maxImages={5}
-              label="Menu Item Images"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Dietary Tags</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newDietaryTag}
-                onChange={(e) => setNewDietaryTag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDietaryTag())}
-                className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50"
-                placeholder="e.g., Vegetarian, Vegan, Gluten-Free"
-              />
-              <button
-                type="button"
-                onClick={addDietaryTag}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className={labelClasses}>Spice Level</label>
+              <select
+                value={formData.spice_level}
+                onChange={(e) => setFormData({ ...formData, spice_level: e.target.value as any })}
+                className={inputClasses}
               >
-                <Plus className="w-4 h-4" />
-              </button>
+                <option value="mild" className="dark:bg-[#121212]">Mild / Delicate</option>
+                <option value="medium" className="dark:bg-[#121212]">Medium / Balanced</option>
+                <option value="hot" className="dark:bg-[#121212]">Hot / Intense</option>
+                <option value="extra-hot" className="dark:bg-[#121212]">Extra Hot / Explosive</option>
+              </select>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {formData.dietary_tags.map((tag, index) => (
-                <span key={index} className="px-3 py-1 bg-green-500/20 text-green-400 rounded-lg flex items-center gap-2 text-sm">
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeDietaryTag(index)}
-                    className="text-green-500 hover:text-green-400"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Ingredients</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newIngredient}
-                onChange={(e) => setNewIngredient(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addIngredient())}
-                className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50"
-                placeholder="e.g., Tomato, Cheese, Basil"
-              />
-              <button
-                type="button"
-                onClick={addIngredient}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {formData.ingredients.map((ing, index) => (
-                <span key={index} className="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-lg flex items-center gap-2 text-sm">
-                  {ing}
-                  <button
-                    type="button"
-                    onClick={() => removeIngredient(index)}
-                    className="text-yellow-500 hover:text-yellow-400"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Allergens</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={newAllergen}
-                onChange={(e) => setNewAllergen(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAllergen())}
-                className="flex-1 px-3 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg focus:ring-2 focus:ring-cyan-500/50"
-                placeholder="e.g., Nuts, Dairy, Gluten"
-              />
-              <button
-                type="button"
-                onClick={addAllergen}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {formData.allergens.map((all, index) => (
-                <span key={index} className="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg flex items-center gap-2 text-sm">
-                  {all}
-                  <button
-                    type="button"
-                    onClick={() => removeAllergen(index)}
-                    className="text-red-500 hover:text-red-400"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="is_available"
-                checked={formData.is_available}
-                onChange={(e) => setFormData({ ...formData, is_available: e.target.checked })}
-                className="w-4 h-4 text-cyan-400 border-[rgba(255,255,255,0.2)] rounded focus:ring-cyan-500/50"
-              />
-              <label htmlFor="is_available" className="ml-2 text-sm text-gray-300">
-                Available
+            <div className="flex items-center gap-8 pt-6 px-4">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={formData.is_available}
+                  onChange={(e) => setFormData({ ...formData, is_available: e.target.checked })}
+                  className="w-5 h-5 rounded-lg border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-cyan-500 focus:ring-cyan-500/20 transition-all cursor-pointer"
+                />
+                <span className="text-sm font-bold text-gray-500 group-hover:text-cyan-500 transition-colors uppercase tracking-widest text-[10px]">Live Available</span>
               </label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="is_featured"
-                checked={formData.is_featured}
-                onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
-                className="w-4 h-4 text-cyan-400 border-[rgba(255,255,255,0.2)] rounded focus:ring-cyan-500/50"
-              />
-              <label htmlFor="is_featured" className="ml-2 text-sm text-gray-300">
-                Featured
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={formData.is_featured}
+                  onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
+                  className="w-5 h-5 rounded-lg border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-purple-500 focus:ring-purple-500/20 transition-all cursor-pointer"
+                />
+                <span className="text-sm font-bold text-gray-500 group-hover:text-purple-400 transition-colors uppercase tracking-widest text-[10px]">Featured Asset</span>
               </label>
             </div>
           </div>
+        </section>
 
-          <div className="flex gap-4 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-[rgba(255,255,255,0.2)] rounded-lg hover:bg-[#050505]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-cyan-500 text-gray-900 text-white rounded-lg hover:bg-cyan-400 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              {loading ? 'Saving...' : menuItem ? 'Update' : 'Create'}
-            </button>
+        {/* Visual Assets Section */}
+        <section className="pt-6 border-t border-gray-100 dark:border-white/5">
+          <ImageUpload
+            value={formData.image_urls}
+            onChange={(urls) => setFormData({ ...formData, image_urls: Array.isArray(urls) ? urls : [urls] })}
+            multiple={true}
+            maxImages={5}
+            label="Visual Representation"
+          />
+        </section>
+
+        {/* Tags & Taxonomy Section */}
+        <section className="space-y-6 pt-6 border-t border-gray-100 dark:border-white/5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Dietary Tags */}
+            <div className="space-y-4">
+              <label className={labelClasses}>Dietary Profile</label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={newDietaryTag}
+                  onChange={(e) => setNewDietaryTag(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDietaryTag())}
+                  className={inputClasses}
+                  placeholder="e.g. Vegan"
+                />
+                <button
+                  type="button"
+                  onClick={addDietaryTag}
+                  className="px-4 rounded-2xl bg-gray-100 dark:bg-white/10 hover:bg-cyan-500 hover:text-white transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.dietary_tags.map((tag, index) => (
+                  <span key={index} className="px-3 py-1.5 bg-green-500/5 text-green-600 dark:text-green-400 rounded-full text-[10px] font-bold tracking-widest border border-green-500/10 flex items-center gap-2">
+                    {tag}
+                    <button type="button" onClick={() => removeDietaryTag(index)} className="hover:text-red-500"><X className="w-3" /></button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Ingredients */}
+            <div className="space-y-4">
+              <label className={labelClasses}>Core Ingredients</label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={newIngredient}
+                  onChange={(e) => setNewIngredient(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addIngredient())}
+                  className={inputClasses}
+                  placeholder="e.g. Fresh Basil"
+                />
+                <button
+                  type="button"
+                  onClick={addIngredient}
+                  className="px-4 rounded-2xl bg-gray-100 dark:bg-white/10 hover:bg-cyan-500 hover:text-white transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.ingredients.map((ing, index) => (
+                  <span key={index} className="px-3 py-1.5 bg-yellow-500/5 text-yellow-600 dark:text-yellow-400 rounded-full text-[10px] font-bold tracking-widest border border-yellow-500/10 flex items-center gap-2">
+                    {ing}
+                    <button type="button" onClick={() => removeIngredient(index)} className="hover:text-red-500"><X className="w-3" /></button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Allergens */}
+            <div className="space-y-4">
+              <label className={labelClasses}>Known Allergens</label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={newAllergen}
+                  onChange={(e) => setNewAllergen(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAllergen())}
+                  className={inputClasses}
+                  placeholder="e.g. Shellfish"
+                />
+                <button
+                  type="button"
+                  onClick={addAllergen}
+                  className="px-4 rounded-2xl bg-gray-100 dark:bg-white/10 hover:bg-cyan-500 hover:text-white transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.allergens.map((all, index) => (
+                  <span key={index} className="px-3 py-1.5 bg-red-500/5 text-red-600 dark:text-red-400 rounded-full text-[10px] font-bold tracking-widest border border-red-500/10 flex items-center gap-2">
+                    {all}
+                    <button type="button" onClick={() => removeAllergen(index)} className="hover:text-red-500"><X className="w-3" /></button>
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </section>
+      </form>
+    </Modal>
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../../services/api';
-import { ClipboardList, Filter, Clock, MapPin, User, ChevronDown } from 'lucide-react';
-import { format } from 'date-fns';
+import { ClipboardList, Filter, Clock, MapPin, User, ChevronDown, RefreshCw, Loader2, CheckCircle2, Package, Truck, XCircle, Search } from 'lucide-react';
+import { format, isValid } from 'date-fns';
 import { useApp } from '../../../contexts/AppContext';
 
 interface OrderItem {
@@ -40,11 +40,11 @@ interface OrdersTabProps {
 }
 
 const ORDER_STATUSES = [
-  { value: 'pending', label: 'Pending', color: 'bg-yellow-500/20 text-yellow-500' },
-  { value: 'preparing', label: 'Preparing', color: 'bg-blue-500/20 text-blue-400' },
-  { value: 'ready', label: 'Ready for Pickup/Delivery', color: 'bg-purple-500/20 text-purple-400' },
-  { value: 'completed', label: 'Completed', color: 'bg-green-500/20 text-green-400' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-red-500/20 text-red-500' }
+  { value: 'pending', label: 'Incoming', color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200/50 dark:border-yellow-500/20', icon: Clock, dot: 'bg-yellow-500' },
+  { value: 'preparing', label: 'Preparing', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200/50 dark:border-blue-500/20', icon: Package, dot: 'bg-blue-500' },
+  { value: 'ready', label: 'Ready', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200/50 dark:border-purple-500/20', icon: Truck, dot: 'bg-purple-500' },
+  { value: 'completed', label: 'Done', color: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-200/50 dark:border-green-500/20', icon: CheckCircle2, dot: 'bg-green-500' },
+  { value: 'cancelled', label: 'Void', color: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200/50 dark:border-red-500/20', icon: XCircle, dot: 'bg-red-500' }
 ];
 
 const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLocations = [] }) => {
@@ -53,17 +53,12 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Filtering
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  
+  const [searchTerm, setSearchTerm] = useState('');
   const { state } = useApp();
   const isBranchUser = state.user?.role === 'branch_user';
-  
-  // Status update tracking
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-
   const hasLoaded = React.useRef(false);
 
   useEffect(() => {
@@ -71,21 +66,13 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
       hasLoaded.current = true;
       loadData();
     }
-    
-    // Auto refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchOrders(false);
-    }, 30000);
-    
+    const interval = setInterval(() => fetchOrders(false), 30000);
     return () => clearInterval(interval);
   }, [restaurantId]);
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([
-      fetchMenuItems(),
-      fetchOrders()
-    ]);
+    await Promise.all([fetchMenuItems(), fetchOrders()]);
     setLoading(false);
   };
 
@@ -93,7 +80,7 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
     try {
       const response = await apiService.getMenuItems(restaurantId);
       if (response.success && response.data) {
-        const items = Array.isArray(response.data) ? response.data : (response.data.items || []);
+        const items = Array.isArray(response.data) ? response.data : ((response.data as any).items || []);
         setMenuItems(items);
       }
     } catch (err) {
@@ -106,23 +93,24 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
     try {
       const response = await apiService.getRestaurantOrders(restaurantId);
       if (response.success && response.data) {
-        let orderList = Array.isArray(response.data) ? response.data : 
-                          (response.data.items || response.data.orders || []);
+        let orderList = Array.isArray(response.data) ? response.data : ((response.data as any).items || (response.data as any).orders || []);
         
-        // Handle MongoDB wrapping vs Postgres flat structure, and map order_status to status
-        orderList = orderList.map((o: any) => {
+        orderList = orderList.filter((o: any) => o !== null && (typeof o === 'object')).map((o: any) => {
           const baseOrder = o.order_data ? o.order_data : o;
-          return {
-            ...baseOrder,
-            status: baseOrder.order_status || baseOrder.status // Postgres uses order_status 
+          return { 
+            ...baseOrder, 
+            status: baseOrder.order_status || baseOrder.status || 'pending',
+            created_at: baseOrder.created_at || new Date().toISOString(),
+            order_id: String(baseOrder.order_id || Math.random().toString(36).substr(2, 9)),
+            total_amount: Number(baseOrder.total_amount || 0)
           };
         });
-        
-        // Sort newest first
-        const sorted = [...orderList].sort((a, b) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        
+
+        const sorted = [...orderList].sort((a, b) => {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
+        });
         setOrders(sorted);
       }
     } catch (err: any) {
@@ -137,224 +125,194 @@ const OrdersTab: React.FC<OrdersTabProps> = ({ restaurantId, locations: propLoca
     try {
       const response = await apiService.updateOrderStatus(orderId, newStatus);
       if (response.success) {
-        // Optimistically update local state
-        setOrders(orders.map(o => 
-          o.order_id === orderId ? { ...o, status: newStatus as any } : o
-        ));
-      } else {
-        alert('Failed to update order status');
+        setOrders(orders.map(o => o.order_id === orderId ? { ...o, status: newStatus as any } : o));
       }
     } catch (err: any) {
-      alert(err.message || 'Error updating order');
+      alert(err.message || 'Update failed');
     } finally {
       setUpdatingId(null);
     }
   };
 
   const getLocationLabel = (locationId?: string) => {
-    if (!locationId) return 'Main Branch';
+    if (!locationId) return 'Main Hub';
     const loc = locations.find(l => l.location_id === locationId);
-    return loc ? `${loc.area}, ${loc.city}` : 'Unknown Branch';
+    return loc ? `${loc.area}` : 'Remote';
   };
 
   const filteredOrders = orders.filter(order => {
     if (selectedLocation !== 'all' && order.location_id !== selectedLocation) return false;
     if (statusFilter !== 'all' && order.status !== statusFilter) return false;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      const matchId = (order.order_id || '').toLowerCase().includes(s);
+      const matchName = (order.customer_name || '').toLowerCase().includes(s);
+      const matchPhone = (order.phone || '').toLowerCase().includes(s);
+      if (!matchId && !matchName && !matchPhone) return false;
+    }
     return true;
   });
 
+  const getFormattedTime = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return isValid(d) ? format(d, 'h:mm a') : '00:00';
+  };
+
   if (loading && orders.length === 0) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+      <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+        <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mb-4" />
+        <p className="text-gray-400 font-medium tracking-widest uppercase text-xs">Streaming Orders...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-cyan-400" />
-            Orders Management
-          </h3>
-          <p className="text-gray-400 text-sm mt-1">View and manage orders across your branches</p>
+    <div className="animate-fade-in space-y-4 max-w-[1600px] mx-auto">
+      {/* Sticky Search & Filter Bar */}
+      <div className="sticky top-[136px] z-30 bg-[#F9FAFB]/80 dark:bg-[#0B0B0B]/80 backdrop-blur-md p-4 rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm flex flex-col md:flex-row items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by Order ID, Name, or Phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/10 rounded-full text-xs font-medium outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+          />
         </div>
         
-        <button 
-          onClick={() => fetchOrders(true)} 
-          className="px-4 py-2 bg-[#111] border border-white/10 hover:bg-white/5 rounded-lg text-sm text-gray-300 transition-colors"
-        >
-          Refresh Now
-        </button>
+        <div className="flex items-center gap-3">
+          {!isBranchUser && (
+            <select
+              value={selectedLocation}
+              onChange={(e) => setSelectedLocation(e.target.value)}
+              className="px-3 py-1.5 bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/5 rounded-lg text-[10px] font-bold text-gray-600 dark:text-gray-300 outline-none"
+            >
+              <option value="all">Global Network</option>
+              {locations.map((loc) => (
+                <option key={loc.location_id} value={loc.location_id}>{loc.area}</option>
+              ))}
+            </select>
+          )}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1.5 bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/5 rounded-lg text-[10px] font-bold text-gray-600 dark:text-gray-300 outline-none"
+          >
+            <option value="all">All Flow States</option>
+            {ORDER_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <button onClick={() => fetchOrders(true)} className="p-2 bg-gray-100 dark:bg-white/5 rounded-lg hover:text-cyan-500 transition-colors">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[10px] font-bold tracking-widest uppercase text-center">
           {error}
         </div>
       )}
 
-      {/* Filters */}
-      <div className="bg-[#111] border border-white/5 rounded-xl p-4 flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-cyan-400" />
-          <span className="text-sm font-medium text-gray-300">Filters:</span>
-        </div>
-        
-        {!isBranchUser && (
-        <div>
-          <label className="sr-only">Branch</label>
-          <select
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-            className="px-3 py-2 bg-[#050505] text-white border border-white/10 rounded-lg focus:outline-none focus:border-cyan-500 text-sm"
-          >
-            <option value="all">All Branches</option>
-            {locations.length === 0 && <option value="unassigned">Main Branch</option>}
-            {locations.map((loc) => (
-              <option key={loc.location_id} value={loc.location_id}>
-                {loc.area}, {loc.city}
-              </option>
-            ))}
-          </select>
-        </div>
-        )}
-
-        <div>
-           <label className="sr-only">Status</label>
-           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-[#050505] text-white border border-white/10 rounded-lg focus:outline-none focus:border-cyan-500 text-sm"
-          >
-            <option value="all">All Statuses</option>
-            {ORDER_STATUSES.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div className="ml-auto text-sm text-gray-400">
-          Showing {filteredOrders.length} order(s)
-        </div>
-      </div>
-
-      {/* Orders List */}
-      <div className="space-y-4">
+      {/* Orders List - Compact */}
+      <div className="grid grid-cols-1 gap-4 pb-20">
         {filteredOrders.length === 0 ? (
-          <div className="bg-[#111] border border-white/5 rounded-xl p-12 text-center">
-            <ClipboardList className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-white mb-1">No orders found</h3>
-            <p className="text-gray-400 text-sm">Waiting for incoming orders matching your filters.</p>
+          <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-[#161616] border border-dashed border-gray-200 dark:border-white/10 rounded-3xl">
+            <ClipboardList className="w-10 h-10 text-gray-200 dark:text-gray-700 mb-4" />
+            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">No orders detected</p>
           </div>
         ) : (
           filteredOrders.map(order => {
-             const currentStatusObj = ORDER_STATUSES.find(s => s.value === order.status) || ORDER_STATUSES[0];
-             
-             return (
-              <div key={order.order_id} className="bg-[#111] border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors">
-                <div className="flex flex-col md:flex-row justify-between gap-4 mb-4 pb-4 border-b border-white/5">
-                  <div>
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className="font-mono text-sm font-semibold text-cyan-400">
+            const statusObj = ORDER_STATUSES.find(s => s.value === order.status) || ORDER_STATUSES[0];
+            const StatusIcon = statusObj.icon;
+            let items: any[] = [];
+            try {
+              items = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items || '[]') : []);
+            } catch (e) {
+              items = [];
+            }
+            
+            return (
+              <div key={order.order_id} className="group relative bg-white dark:bg-[#161616] border border-gray-200 dark:border-white/5 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300">
+                <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+                  {/* Left: ID & Time & Status */}
+                  <div className="flex items-center gap-5 min-w-[300px]">
+                    <div className="flex flex-col">
+                      <span className="font-mono text-sm font-black text-cyan-500">
                         #{order.order_id.substring(0, 8).toUpperCase()}
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-400 capitalize">
-                        {order.order_type}
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" /> {getFormattedTime(order.created_at)}
+                        <span className="mx-1 opacity-20">•</span>
+                        <MapPin className="w-3 h-3" /> {getLocationLabel(order.location_id)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {format(new Date(order.created_at), 'MMM d, yyyy h:mm a')}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5" />
-                        {getLocationLabel(order.location_id)}
-                      </span>
+                    {/* Compact Status Pill */}
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${statusObj.dot} animate-pulse`} />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">{statusObj.label}</span>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <span className="block text-sm text-gray-400">Status</span>
-                      <div className="relative">
+
+                  {/* Middle Row: Entity & Summary merged horizontally */}
+                  <div className="flex-1 flex flex-col md:flex-row items-center gap-8 xl:gap-12 w-full">
+                    {/* Entity Creds */}
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2 text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                        <User className="w-3 h-3" /> Credentials
+                      </div>
+                      <div className="flex items-baseline gap-3">
+                        <h4 className="text-sm font-black text-gray-900 dark:text-white truncate max-w-[150px]">{order.customer_name || 'Guest'}</h4>
+                        <span className="text-[10px] font-medium text-gray-400">{order.phone || 'N/A'}</span>
+                      </div>
+                      {order.delivery_address && (
+                         <p className="text-[10px] text-gray-500 italic truncate max-w-[200px]" title={order.delivery_address}>{order.delivery_address}</p>
+                      )}
+                    </div>
+
+                    {/* Order Summary Row */}
+                    <div className="flex-[2] space-y-1">
+                       <div className="flex items-center gap-2 text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                         <Package className="w-3 h-3" /> Summary ({items.length} items)
+                       </div>
+                       <div className="flex flex-wrap gap-2">
+                         {items.slice(0, 3).map((item: any, i: number) => (
+                           <span key={i} className="px-2 py-0.5 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-md text-[10px] font-bold text-gray-600 dark:text-gray-400">
+                             {item.quantity}x {item.name || `Item ${i+1}`}
+                           </span>
+                         ))}
+                         {items.length > 3 && <span className="text-[10px] text-gray-400 font-bold">+{items.length - 3} more</span>}
+                       </div>
+                    </div>
+
+                    {/* Total */}
+                    <div className="text-right min-w-[100px]">
+                      <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">Valuation</span>
+                      <span className="text-xl font-black text-gray-900 dark:text-white">${Number(order.total_amount).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-2 pl-4 border-l border-gray-100 dark:border-white/5 min-w-[150px]">
+                     <div className="relative w-full">
                         <select
                           value={order.status}
                           onChange={(e) => handleStatusChange(order.order_id, e.target.value)}
                           disabled={updatingId === order.order_id}
-                          className={`appearance-none pl-3 pr-8 py-1.5 rounded-lg text-sm font-medium border border-transparent hover:border-white/10 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${currentStatusObj.color} bg-[#050505] disabled:opacity-50`}
+                          className={`w-full appearance-none pl-3 pr-8 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all cursor-pointer outline-none ${statusObj.color}`}
                         >
-                          {ORDER_STATUSES.map(s => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
-                          ))}
+                          {ORDER_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
-                        <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Customer Info */}
-                  <div className="space-y-2">
-                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer Details</h4>
-                     <div className="flex items-start gap-2 text-sm text-gray-300">
-                        <User className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="font-medium text-white">{order.customer_name || 'Guest Customer'}</p>
-                          {order.phone && <p>{order.phone}</p>}
-                          {order.delivery_address && (
-                            <p className="mt-1 text-gray-400">{order.delivery_address}</p>
-                          )}
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Order Items */}
-                  <div className="space-y-2">
-                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Order Items</h4>
-                     <ul className="space-y-2">
-                       {(Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items || '[]') : [])).map((item: any, idx: number) => {
-                         const menuItem = menuItems.find((m: any) => m.item_id === item.item_id) || {};
-                         const itemName = item.name || menuItem.name || `Item ${item.item_id?.substring(0,4) || 'Unknown'}`;
-                         
-                         // Determine price. First check if order payload has it. Then menu item. Default 0.
-                         let itemStrPrice = String(item.price || menuItem.base_price || '0');
-                         const parsedPrice = parseFloat(itemStrPrice);
-                         const finalItemPrice = isNaN(parsedPrice) ? 0 : parsedPrice;
-                         const itemTotal = finalItemPrice * (item.quantity || 1);
-
-                         return (
-                         <li key={idx} className="flex justify-between items-start text-sm">
-                           <div className="flex gap-2">
-                             <span className="font-medium text-cyan-400">{item.quantity}x</span>
-                             <div>
-                               <span className="text-gray-200">{itemName}</span>
-                               {item.special_instructions && (
-                                 <p className="text-xs text-yellow-500/80 mt-0.5">Note: {item.special_instructions}</p>
-                               )}
-                             </div>
-                           </div>
-                           <span className="text-gray-400 font-medium whitespace-nowrap">
-                             ${itemTotal.toFixed(2)}
-                           </span>
-                         </li>
-                         );
-                       })}
-                     </ul>
-                     <div className="pt-3 mt-3 border-t border-white/5 flex justify-between items-center">
-                       <span className="font-medium text-gray-300">Total Amount</span>
-                       <span className="text-lg font-bold text-white">
-                         ${typeof order.total_amount === 'number' ? order.total_amount.toFixed(2) : parseFloat((order as any).total_amount || '0').toFixed(2)}
-                       </span>
+                        <ChevronDown className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40" />
+                        {updatingId === order.order_id && (
+                          <Loader2 className="w-3 h-3 absolute -right-5 top-1/2 -translate-y-1/2 text-cyan-500 animate-spin" />
+                        )}
                      </div>
                   </div>
                 </div>
               </div>
-             );
+            );
           })
         )}
       </div>
