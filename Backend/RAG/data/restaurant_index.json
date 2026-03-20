@@ -1,0 +1,34 @@
+{
+    "restaurants": [
+        {
+            "id": "cheezious",
+            "name": "Cheezious",
+            "file": "cheezious.json",
+            "keywords": [
+                "cheezious",
+                "pizza",
+                "burger"
+            ]
+        },
+        {
+            "id": "kfc",
+            "name": "KFC",
+            "file": "kfc.json",
+            "keywords": [
+                "kfc",
+                "chicken",
+                "zinger"
+            ]
+        },
+        {
+            "id": "pizza-hut",
+            "name": "Pizza Hut",
+            "file": "pizza_hut.json",
+            "keywords": [
+                "pizza hut",
+                "hut"
+            ]
+        }
+    ],
+    "default_restaurant": "cheezious"
+}

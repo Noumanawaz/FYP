@@ -13,7 +13,7 @@ import json
 import re
 import hashlib
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import pdfplumber
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -48,87 +48,134 @@ class VectorDBBuilder:
         
         print(f"✅ Initialized ChromaDB at {vector_db_dir}")
     
-    def extract_text_from_pdf(self, pdf_path: str) -> str:
-        """Extract text from a PDF file with improved price extraction"""
-        text_content = []
-        
+    def extract_text_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
+        """Extract text from a PDF file page by page with meta tags"""
         try:
+            pages = []
             with pdfplumber.open(pdf_path) as pdf:
                 for page_num, page in enumerate(pdf.pages, 1):
-                    # Try extracting tables first (better for structured data like menus with prices)
+                    # Try extracting tables first
                     tables = page.extract_tables()
                     page_text = ""
                     
-                    # Extract tables if available
                     if tables:
                         for table in tables:
                             for row in table:
                                 if row:
-                                    # Join row cells with proper spacing
                                     row_text = " | ".join([str(cell) if cell else "" for cell in row])
                                     if row_text.strip():
                                         page_text += row_text + "\n"
                     
-                    # Also extract regular text (fallback and for non-table content)
                     regular_text = page.extract_text()
                     if regular_text:
-                        # Combine table and regular text
                         if page_text:
                             page_text += "\n" + regular_text
                         else:
                             page_text = regular_text
                     
-                    # Try to extract text using layout preservation (better for prices)
                     if not page_text or len(page_text) < 100:
-                        # Try extracting with layout=True for better structure
                         layout_text = page.extract_text(layout=True)
                         if layout_text and len(layout_text) > len(page_text):
                             page_text = layout_text
                     
-                    # Clean up common PDF extraction artifacts
                     if page_text:
-                        # 1. Remove (cid:n) patterns (common PDF encoding error)
                         page_text = re.sub(r'\(cid:\d+\)', '', page_text)
                         
-                        # 2. Fix "s p a c e d" out text (e.g., "M e n u" -> "Menu")
-                        # If a string has spaces between every character, collapse it
                         def fix_spaced_text(match):
                             text = match.group(0)
                             if len(text) > 4 and " " in text:
-                                # Check if it's mostly single characters separated by spaces
                                 parts = text.split()
                                 if all(len(p) == 1 for p in parts if p):
                                     return "".join(parts)
                             return text
                         
                         page_text = re.sub(r'([A-Za-z]\s){3,}[A-Za-z]', fix_spaced_text, page_text)
-
-                        # 3. Clean up null bytes and special characters
                         page_text = re.sub(r'\x00+', ' ', page_text)
-                        
-                        # 4. Normalize spacing (but keep newlines for section separation)
                         page_text = re.sub(r'[ \t]+', ' ', page_text)
                         
-                        text_content.append(f"Page {page_num}:\n{page_text}\n")
+                        # Split by major headers to store categories and info separately
+                        sections = re.split(r'\n(?=Restaurant Details|Categories & Identity|Branches & Locations|Menu Categories|Menu Items)', page_text)
+                        
+                        for section in sections:
+                            section = section.strip()
+                            if not section: continue
+                            
+                            # Infer tag based on the starting header
+                            if section.startswith("Restaurant Details"):
+                                tag = "general information"
+                            elif section.startswith("Categories & Identity"):
+                                tag = "restaurant identity"
+                            elif section.startswith("Branches & Locations"):
+                                tag = "location information"
+                            elif section.startswith("Menu Categories") or "•" in section:
+                                tag = "menu items"  # Per user request, categories are also menu items tag
+                            elif section.startswith("Menu Items"):
+                                tag = "menu items"
+                            else:
+                                tag = self.infer_page_type(section)
+                                
+                            pages.append({
+                                "content": section,
+                                "page_num": page_num,
+                                "type": tag
+                            })
             
-            full_text = "\n".join(text_content)
-            print(f"✅ Extracted {len(full_text)} characters from {os.path.basename(pdf_path)}")
-            return full_text
+            print(f"✅ Extracted {len(pages)} sections/pages from {os.path.basename(pdf_path)}")
+            return pages
         
         except Exception as e:
             print(f"❌ Error extracting text from {pdf_path}: {e}")
-            return ""
+            return []
 
-    def extract_text_from_txt(self, txt_path: str) -> str:
-        """Simply read a plain text file"""
+    def extract_text_from_txt(self, txt_path: str) -> List[Dict]:
+        """Simply read a plain text file as a single page"""
         try:
             with open(txt_path, 'r', encoding='utf-8') as f:
                 text = f.read()
             print(f"✅ Extracted {len(text)} characters from {os.path.basename(txt_path)}")
-            return text
+            
+            page_type = self.infer_page_type(text)
+            
+            return [{
+                "content": text.strip(),
+                "page_num": 1,
+                "type": page_type
+            }]
         except Exception as e:
             print(f"❌ Error reading text file {txt_path}: {e}")
-            return ""
+            return []
+
+    def infer_page_type(self, text: str) -> str:
+        """Infer if the content is 'menu items' or 'general information'"""
+        text_lower = text.lower()
+        
+        # Heuristics for menu
+        menu_score = 0
+        if "|" in text: menu_score += 2 # Table separator
+        # Reward prices, currencies, and menu-specific terms
+        if any(kw in text_lower for kw in ["rs.", "pkr", "price", "menu", "category", "dish", "deal", "calories", "kcal", "marinade", "starter"]):
+            menu_score += 3
+            
+        # Check for price patterns like " 500" or " 1,200" or " — PKR"
+        if re.search(r'\d{2,}\s*$', text, re.MULTILINE) or re.search(r'—\s*pkr\s*\d+', text_lower):
+            menu_score += 4
+            
+        # Reward specific menu item markers like "★" or bullet points with descriptions
+        if "★" in text or re.search(r'•\s+\w+:', text):
+            menu_score += 2
+        
+        # Heuristics for general info
+        info_score = 0
+        if any(kw in text_lower for kw in ["contact", "phone", "email", "address", "location", "branch", "open", "hours", "about us", "founded", "specialties", "identity"]):
+            info_score += 3
+            
+        if any(kw in text_lower for kw in ["cuisine", "keywords", "branches", "est.", "established"]):
+            info_score += 2
+        
+        if menu_score >= info_score:
+            return "menu items"
+        else:
+            return "general information"
     
     def chunk_text(self, text: str, chunk_size: int = 500, chunk_overlap: int = 100) -> List[str]:
         """
@@ -319,27 +366,24 @@ class VectorDBBuilder:
                 print(f"✅ {restaurant_name} already up to date, skipping...\n")
                 continue
             
-            # Extract text
+            # Extract pages/content
             if filename.lower().endswith(".pdf"):
-                text = self.extract_text_from_pdf(str(file_path))
+                extracted_pages = self.extract_text_from_pdf(str(file_path))
             else:
-                text = self.extract_text_from_txt(str(file_path))
+                extracted_pages = self.extract_text_from_txt(str(file_path))
             
-            if not text:
-                print(f"⚠️  No text extracted from {filename}, skipping...\n")
+            if not extracted_pages:
+                print(f"⚠️  No content extracted from {filename}, skipping...\n")
                 continue
             
-            # Chunk the text
-            chunks = self.chunk_text(text)
-            print(f"📝 Created {len(chunks)} text chunks")
+            # Prepare data for storage
+            contents = [p['content'] for p in extracted_pages]
+            meta_tags = [p['type'] for p in extracted_pages]
             
-            if not chunks:
-                print(f"⚠️  No chunks created from {filename}, skipping...\n")
-                continue
-            
-            # Create embeddings
-            print(f"🧮 Generating embeddings...")
-            embeddings = self.embedding_model.encode(chunks, show_progress_bar=True)
+            # Create embeddings (Optional: making it optional as per request "instead of embeddings")
+            # We'll keep them for now but allow the system to function without them if needed
+            print(f"🧮 Generating embeddings for {len(contents)} pages...")
+            embeddings = self.embedding_model.encode(contents, show_progress_bar=True)
             
             # ── Store in NeonDB (pgvector) ──────────────────────────────────────
             import services.neon_vector_store as neon_store
@@ -347,43 +391,17 @@ class VectorDBBuilder:
                 neon_count = neon_store.upsert_chunks(
                     restaurant_id=restaurant_id,
                     restaurant_name=restaurant_name,
-                    chunks=chunks,
+                    chunks=contents,
                     embeddings=embeddings,
+                    meta_tags=meta_tags,
                     pdf_filename=filename
                 )
-                print(f"✅ Synced {neon_count} chunks to NeonDB (Cloud)")
+                print(f"✅ Synced {neon_count} pages with meta tags to NeonDB (Cloud)")
             except Exception as e:
                 print(f"⚠️  Failed to sync to NeonDB: {e}")
 
-            # Prepare documents for ChromaDB (Local Backup)
-            ids = []
-            documents = []
-            metadatas = []
-            
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-                chunk_id = f"{restaurant_id}_chunk_{i}"
-                ids.append(chunk_id)
-                documents.append(chunk)
-                metadatas.append({
-                    "restaurant_id": restaurant_id,
-                    "restaurant_name": restaurant_name,
-                    "pdf_filename": filename,
-                    "chunk_index": i,
-                    "hash": file_hash,
-                    "type": restaurant_info.get("type", "menu")
-                })
-            
-            # Store in ChromaDB
-            self.restaurant_collection.add(
-                ids=ids,
-                documents=documents,
-                embeddings=embeddings.tolist(),
-                metadatas=metadatas
-            )
-            
-            total_chunks += len(chunks)
+            total_chunks += len(extracted_pages)
             processed_count += 1
-            print(f"✅ Stored {len(chunks)} chunks for {restaurant_name}\n")
         
         # Store restaurant index metadata
         self._store_restaurant_index_metadata(restaurant_index)
@@ -393,6 +411,53 @@ class VectorDBBuilder:
         print(f"   - Created {total_chunks} total chunks")
         print(f"   - Vector DB location: {self.vector_db_dir}\n")
     
+    def ingest_single_file(self, file_path: str, restaurant_id: str, restaurant_name: str, file_hash: str = "") -> Dict:
+        """Ingest a single PDF/TXT file and store in databases"""
+        file_path_obj = Path(file_path)
+        filename = file_path_obj.name
+        
+        print(f"📖 Ingesting single file: {filename} for {restaurant_name}")
+        
+        # 1. Extract content
+        if filename.lower().endswith(".pdf"):
+            extracted_pages = self.extract_text_from_pdf(str(file_path))
+        else:
+            extracted_pages = self.extract_text_from_txt(str(file_path))
+            
+        if not extracted_pages:
+            return {"success": False, "error": "No content extracted"}
+            
+        # 2. Prepare data
+        contents = [p['content'] for p in extracted_pages]
+        meta_tags = [p['type'] for p in extracted_pages]
+        
+        # 3. Create embeddings
+        print(f"🧮 Generating embeddings for {len(contents)} pages...")
+        embeddings = self.embedding_model.encode(contents, show_progress_bar=True)
+        
+        # 4. Store in NeonDB
+        import services.neon_vector_store as neon_store
+        neon_count = 0
+        try:
+            neon_count = neon_store.upsert_chunks(
+                restaurant_id=restaurant_id,
+                restaurant_name=restaurant_name,
+                chunks=contents,
+                embeddings=embeddings,
+                meta_tags=meta_tags,
+                pdf_filename=filename
+            )
+            print(f"✅ Synced {neon_count} pages to NeonDB")
+        except Exception as e:
+            print(f"⚠️  NeonDB sync failed: {e}")
+            
+        return {
+            "success": True,
+            "restaurant_id": restaurant_id,
+            "chunks_created": len(extracted_pages),
+            "neon_synced": neon_count > 0
+        }
+
     def _store_restaurant_index_metadata(self, restaurant_index: Dict):
         """Store restaurant index metadata in vector DB"""
         try:

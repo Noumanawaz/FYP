@@ -1,43 +1,80 @@
 import os
+# CRITICAL: Prevent PyTorch/SentenceTransformers from hanging the event loop on macOS
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import json
 import asyncio
 import tempfile
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 from dotenv import load_dotenv
 
 from utils.rag_system import MultiRestaurantRAGSystem
-from services.llm_service import GroqLLMService
+from services.llm_service import OpenAILLMService
+# Imports kept but logic simplified for reliability as requested
 from services.orchestrator_service import OrchestratorService
-from services.basic_handler import BasicHandler
-from services.order_handler import OrderHandler
+from services.session_service import SessionManager
 from build_vector_db import VectorDBBuilder
 from services import neon_vector_store
 
 load_dotenv()
 
-# Initialize FastAPI app
-app = FastAPI(title="Multi-Restaurant RAG Voice Assistant", version="2.0.0")
+from contextlib import asynccontextmanager
+
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global rag_system, llm_service, db_builder
+    
+    print("🚀 Starting Multi-Restaurant RAG Voice Assistant...")
+    
+    try:
+        # Initialize RAG system
+        rag_system = MultiRestaurantRAGSystem()
+        print(f"✅ RAG initialized. Vector DB: {rag_system.use_vector_db}")
+        
+        # Ensure NeonDB schema is up to date
+        neon_vector_store.setup_table()
+        
+        # Initialize LLM service (OpenAI)
+        llm_service = OpenAILLMService()
+        print(f"✅ LLM initialized with model: {llm_service.model}")
+        
+        # Initialize Vector DB Builder for ingestion
+        db_builder = VectorDBBuilder()
+        print("✅ Vector DB Builder initialized for ingestion")
+        
+    except Exception as e:
+        print(f"❌ Error during startup: {e}")
+        
+    yield
+    # Shutdown logic can go here if needed
+    print("👋 Shutting down Multi-Restaurant RAG Voice Assistant...")
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(
+    title="Multi-Restaurant RAG Voice Assistant", 
+    version="2.0.0",
+    lifespan=lifespan
+)
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize services
+# Global instances
 rag_system = None
 llm_service = None
-orchestrator_service = None
-basic_handler = None
-order_handler = None
+db_builder = None
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -49,14 +86,8 @@ class ConnectionManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
 manager = ConnectionManager()
 
@@ -64,9 +95,10 @@ manager = ConnectionManager()
 class ChatRequest(BaseModel):
     message: str
     restaurant_id: Optional[str] = None
+    session_id: Optional[str] = "default_session"
 
 class ChatResponse(BaseModel):
-    response: str  # backwards-compatible (English)
+    response: str
     response_en: str
     response_ur: str
     restaurant_name: str
@@ -74,301 +106,35 @@ class ChatResponse(BaseModel):
     suggestions: List[str]
     response_type: str = "chat"
 
-class SearchRequest(BaseModel):
-    query: str
-    restaurant_id: Optional[str] = None
-
-class RestaurantInfo(BaseModel):
-    id: str
-    name: str
-    description: str
-    specialties: List[str]
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    global rag_system, llm_service, orchestrator_service, basic_handler, order_handler
-    
-    # Set up NeonDB pgvector table (idempotent)
-    try:
-        neon_vector_store.setup_table()
-    except Exception as e:
-        print(f"⚠️ NeonDB setup failed during startup: {e}")
-
-    print("🚀 Starting Multi-Restaurant RAG Voice Assistant...")
-    
-    try:
-        # Initialize RAG system (will use vector DB if available, fallback to JSON)
-        rag_system = MultiRestaurantRAGSystem()
-        if rag_system.use_vector_db:
-            print("✅ Multi-restaurant RAG system initialized with Vector DB")
-        else:
-            print("✅ Multi-restaurant RAG system initialized with JSON (fallback mode)")
-            print("💡 Tip: Run 'python build_vector_db.py' to create vector database from PDFs")
-        
-        # Initialize LLM service (Groq)
-        llm_service = GroqLLMService()
-        print("✅ LLM service initialized")
-
-        # Initialize Orchestrator and Handlers
-        orchestrator_service = OrchestratorService(llm_service)
-        basic_handler = BasicHandler()
-        order_handler = OrderHandler()
-        print("✅ Orchestrator system initialized")
-        
-        print(f"🎯 Available restaurants: {[r['name'] for r in rag_system.get_available_restaurants()]}")
-        
-    except Exception as e:
-        print(f"❌ Error during startup: {e}")
-        raise
-
-# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {
-        "status": "healthy",
-        "rag_system": "initialized" if rag_system else "not_initialized",
-        "llm_service": "initialized" if llm_service else "not_initialized",
-        "llm_model": getattr(llm_service, "model", None),
-        "llm_configured": getattr(llm_service, "is_configured", lambda: False)(),
-        "available_restaurants": len(rag_system.get_available_restaurants()) if rag_system else 0,
-        "using_vector_db": rag_system.use_vector_db if rag_system else False,
-        "vector_db_chunks": rag_system.restaurant_collection.count() if rag_system and rag_system.use_vector_db and rag_system.restaurant_collection else 0
+        "status": "healthy" if rag_system and llm_service else "initializing",
+        "rag": "ready" if rag_system else "pending",
+        "llm": "ready" if llm_service else "pending"
     }
 
-# RAG System Diagnostic endpoint
-@app.get("/rag/diagnostic")
-async def rag_diagnostic():
-    """Diagnostic endpoint to verify RAG system is working correctly"""
-    if not rag_system:
-        return {"error": "RAG system not initialized"}
-    
-    diagnostic = {
-        "vector_db_enabled": rag_system.use_vector_db,
-        "vector_db_initialized": rag_system.restaurant_collection is not None if rag_system.use_vector_db else False,
-        "total_chunks": rag_system.restaurant_collection.count() if rag_system.use_vector_db and rag_system.restaurant_collection else 0,
-        "restaurants": [r["name"] for r in rag_system.get_available_restaurants()],
-        "test_query": None
-    }
-    
-    # Test query to verify retrieval
-    if rag_system.use_vector_db:
-        try:
-            test_result = rag_system.search_vector_db("pizza prices", top_k=3)
-            diagnostic["test_query"] = {
-                "query": "pizza prices",
-                "chunks_retrieved": len(test_result),
-                "sample_chunk": {
-                    "restaurant": test_result[0]["restaurant_name"] if test_result else None,
-                    "similarity": test_result[0]["similarity"] if test_result else None,
-                    "content_preview": test_result[0]["content"][:200] if test_result else None,
-                    "has_rupees": "Rs." in test_result[0]["content"] if test_result else False
-                } if test_result else None
-            }
-        except Exception as e:
-            diagnostic["test_query_error"] = str(e)
-    
-    return diagnostic
-
-# Get available restaurants
-@app.get("/restaurants", response_model=List[RestaurantInfo])
-async def get_restaurants():
-    if not rag_system:
-        raise HTTPException(status_code=500, detail="RAG system not initialized")
-    
-    restaurants = []
-    for restaurant in rag_system.get_available_restaurants():
-        restaurants.append(RestaurantInfo(
-            id=restaurant["id"],
-            name=restaurant["name"],
-            description=restaurant["description"],
-            specialties=restaurant["specialties"]
-        ))
-    
-    return restaurants
-
-
-# ─── Ingest Restaurant PDF ─────────────────────────────────────────────────────
-
-@app.post("/ingest-restaurant")
-async def ingest_restaurant_pdf(
-    file: UploadFile = File(...),
-    restaurant_id: str = Form(...),
-    restaurant_name: str = Form(...),
-):
-    """
-    Accept a PDF file for a new restaurant, chunk its text, generate embeddings
-    with SentenceTransformer, and upsert into ChromaDB — making the restaurant
-    immediately queryable via the RAG /chat endpoint.
-    """
-    if not rag_system:
-        raise HTTPException(status_code=500, detail="RAG system not initialized")
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-
-    print(f"📄 Ingesting PDF for restaurant: {restaurant_name} (id={restaurant_id})")
-
-    # Save uploaded file to a temp location
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
-
-    try:
-        # Re-use the VectorDBBuilder's chunking + embedding pipeline
-        builder = VectorDBBuilder(vector_db_dir="vector_db")
-
-        # Extract text from the temp PDF
-        text = builder.extract_text_from_pdf(tmp_path)
-        if not text or len(text.strip()) < 50:
-            raise HTTPException(status_code=422, detail="Could not extract sufficient text from the PDF")
-
-        # Chunk the text
-        chunks = builder.chunk_text(text)
-        if not chunks:
-            raise HTTPException(status_code=422, detail="Text chunking produced no chunks")
-
-        print(f"📝 Created {len(chunks)} chunks for {restaurant_name}")
-
-        # Generate embeddings
-        embeddings = builder.embedding_model.encode(chunks, show_progress_bar=False)
-
-        # ── Store in NeonDB (pgvector) ──────────────────────────────────────
-        try:
-            neon_chunks = neon_vector_store.upsert_chunks(
-                restaurant_id=restaurant_id,
-                restaurant_name=restaurant_name,
-                chunks=chunks,
-                embeddings=embeddings,
-                pdf_filename=file.filename or "",
-            )
-            print(f"✅ Ingested {neon_chunks} chunks for {restaurant_name} into NeonDB (pgvector)")
-        except Exception as neon_err:
-            # Fall back to ChromaDB if NeonDB fails
-            print(f"⚠️ NeonDB insert failed ({neon_err}), falling back to ChromaDB")
-            safe_id = restaurant_id.replace("-", "_").replace(" ", "_")[:40]
-            ids = [f"{safe_id}_chunk_{i}" for i in range(len(chunks))]
-            metadatas = [
-                {
-                    "restaurant_id": restaurant_id,
-                    "restaurant_name": restaurant_name,
-                    "pdf_filename": file.filename,
-                    "chunk_index": i,
-                    "hash": "",
-                    "type": "restaurant_info",
-                }
-                for i in range(len(chunks))
-            ]
-            try:
-                builder.restaurant_collection.delete(where={"restaurant_id": restaurant_id})
-            except Exception:
-                pass
-            builder.restaurant_collection.add(
-                ids=ids,
-                documents=chunks,
-                embeddings=embeddings.tolist(),
-                metadatas=metadatas,
-            )
-            neon_chunks = len(chunks)
-            print(f"✅ Ingested {neon_chunks} chunks for {restaurant_name} into ChromaDB (fallback)")
-
-        chunk_count = neon_chunks
-
-        return {
-            "success": True,
-            "restaurant_id": restaurant_id,
-            "restaurant_name": restaurant_name,
-            "chunks_created": chunk_count,
-            "message": f"Successfully ingested {chunk_count} chunks into the RAG knowledge base",
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error ingesting PDF: {e}")
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
-    finally:
-        # Clean up temp file
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-
-# Chat endpoint
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     if not rag_system or not llm_service:
-        raise HTTPException(status_code=500, detail="Services not initialized")
+        raise HTTPException(status_code=503, detail="System initializing")
     
     try:
-
-        # Orchestrate the query
-        query_type = orchestrator_service.classify_query(request.message)
-        print(f"🧠 Query classified as: {query_type}")
-
-        if query_type == "greeting":
-            handler_response = basic_handler.handle(request.message)
-            return ChatResponse(
-                response=handler_response["response"],
-                response_en=handler_response["response_en"],
-                response_ur=handler_response["response_ur"],
-                restaurant_name="Vocabite Assistant",
-                confidence=1.0,
-                suggestions=[],
-                response_type="greeting"
-            )
-
-        elif query_type == "order":
-            handler_response = order_handler.handle(request.message)
-            return ChatResponse(
-                response=handler_response["response"],
-                response_en=handler_response["response_en"],
-                response_ur=handler_response["response_ur"],
-                restaurant_name="Vocabite Assistant",
-                confidence=1.0,
-                suggestions=handler_response.get("suggestions", []),
-                response_type="order_placeholder"
-            )
-
-        # Process query with the new multi-restaurant system (Complex/RAG)
-        rag_result = rag_system.process_query(request.message)
+        print(f"💬 Chat: {request.message}")
         
-        # Log context retrieval for debugging
-        context_length = len(rag_result.get('context', ''))
-        print(f"📊 RAG Context Length: {context_length} characters")
-        print(f"📊 Using Vector DB: {rag_system.use_vector_db}")
-        if context_length < 100:
-            print("⚠️  WARNING: Context is very short, might not have retrieved relevant information")
+        # 1. RAG Context Retrieval (Offload to thread to keep loop free)
+        rag_result = await asyncio.to_thread(rag_system.process_query, request.message)
+        context = rag_result.get('context', '')
         
-        # Build prompt for LLM
-        detected_restaurants = rag_result.get('detected_restaurants', [])
-        query_type_rag = rag_result.get('query_type', 'general') # renamed to avoid conflict
+        # 2. Dual LLM Response (EN + UR in one call)
+        responses = await llm_service.generate_dual_response(request.message, context)
+        llm_response_en = responses['en']
+        llm_response_ur = responses['ur']
         
-        # Generate English response with context
-        llm_response_en = llm_service.generate_response(
-            user_message=request.message,
-            context=rag_result['context']
-        )
-        
-        # Generate Urdu translation
-        llm_response_ur = llm_service.generate_response(
-            user_message=f"Translate this to Urdu (keep it natural and conversational):\n\n{llm_response_en}"
-        )
-        
-        # Determine primary restaurant for response
-        detected_restaurants = rag_result.get('detected_restaurants', [])
-        if detected_restaurants:
-            primary_restaurant = detected_restaurants[0]['name']
-            confidence = detected_restaurants[0]['confidence']
-        else:
-            primary_restaurant = "Multiple Restaurants"
-            confidence = 1.0
+        # Metadata
+        detected = rag_result.get('detected_restaurants', [])
+        primary_restaurant = detected[0]['name'] if detected else "Assistant"
+        confidence = detected[0]['confidence'] if detected else 1.0
         
         return ChatResponse(
             response=llm_response_en,
@@ -376,182 +142,107 @@ async def chat(request: ChatRequest):
             response_ur=llm_response_ur,
             restaurant_name=primary_restaurant,
             confidence=confidence,
-            suggestions=rag_result["suggestions"],
+            suggestions=rag_result.get("suggestions", []),
             response_type="chat"
         )
-        
     except Exception as e:
-        print(f"❌ Error in chat endpoint: {e}")
+        print(f"❌ Chat Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Search endpoint
-@app.post("/search")
-async def search_menu(request: SearchRequest):
-    if not rag_system:
-        raise HTTPException(status_code=500, detail="RAG system not initialized")
+@app.post("/ingest-restaurant")
+async def ingest_restaurant(
+    file: UploadFile = File(...),
+    restaurant_id: str = Form(...),
+    restaurant_name: str = Form(...)
+):
+    """
+    Ingest a restaurant's PDF/TXT information into the RAG system.
+    Extracts text, creates embeddings, and stores in NeonDB and ChromaDB.
+    """
+    if not db_builder:
+        raise HTTPException(status_code=503, detail="DB Builder not initialized")
+    
+    # Check file extension
+    filename = file.filename
+    if not (filename.lower().endswith('.pdf') or filename.lower().endswith('.txt')):
+        raise HTTPException(status_code=400, detail="Only .pdf and .txt files are supported")
     
     try:
-        restaurant_id = request.restaurant_id  # optional
-        results = rag_system.search_menu(request.query, restaurant_id)
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
         
-        return {
-            "query": request.query,
-            "restaurant_id": restaurant_id,
-            "results": results,
-            "total_results": len(results)
-        }
+        # Process the file
+        print(f"📥 Processing ingest request for {restaurant_name} ({restaurant_id})")
+        result = await asyncio.to_thread(
+            db_builder.ingest_single_file, 
+            tmp_path, 
+            restaurant_id, 
+            restaurant_name
+        )
         
-    except Exception as e:
-        print(f"❌ Error in search endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Restaurant summary endpoint
-@app.get("/restaurant/{restaurant_id}/summary")
-async def get_restaurant_summary(restaurant_id: str):
-    if not rag_system:
-        raise HTTPException(status_code=500, detail="RAG system not initialized")
-    
-    try:
-        # Get restaurant data directly
-        if restaurant_id in rag_system.restaurant_data:
-            restaurant_data = rag_system.restaurant_data[restaurant_id]
-            brand = restaurant_data.get("brand", {})
-            branches = restaurant_data.get("branches", {})
+        # Clean up
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
             
-            summary = {
-                "name": brand.get("name", restaurant_id),
-                "description": brand.get("description", ""),
-                "founded": brand.get("founded", ""),
-                "cities": branches.get("cities", []),
-                "total_branches": branches.get("total_branches", ""),
-                "hours": branches.get("hours", "")
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"Successfully ingested {restaurant_name}",
+                "chunks_created": result.get("chunks_created", 0),
+                "neon_synced": result.get("neon_synced", False)
             }
-            return {"restaurant_id": restaurant_id, "summary": summary}
         else:
-            raise HTTPException(status_code=404, detail=f"Restaurant {restaurant_id} not found")
-        
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown ingestion error"))
+            
     except Exception as e:
-        print(f"❌ Error getting restaurant summary: {e}")
+        print(f"❌ Ingestion Error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# WebSocket endpoint for real-time voice communication
 @app.websocket("/ws/voice")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    print("🔌 WS Connected")
     
     try:
         while True:
-            # Receive message from client
             data = await websocket.receive_text()
-            message_data = json.loads(data)
+            msg = json.loads(data)
             
-            if message_data.get("type") == "chat":
-                user_message = message_data.get("message", "")
+            if msg.get("type") == "chat":
+                text = msg.get("message", "")
                 
-                # Orchestrate the query
-                query_type = orchestrator_service.classify_query(user_message)
-                print(f"🧠 [WS] Query classified as: {query_type}")
-
-                if query_type == "greeting":
-                    handler_response = basic_handler.handle(user_message)
-                    response_data = {
-                        "type": "chat_response",
-                        "response": handler_response["response"],
-                        "response_en": handler_response["response_en"],
-                        "response_ur": handler_response["response_ur"],
-                        "restaurant_name": "Vocabite Assistant",
-                        "confidence": 1.0,
-                        "suggestions": [],
-                        "response_type": "greeting"
-                    }
-                    await websocket.send_text(json.dumps(response_data))
-                    continue # Skip RAG
-
-                elif query_type == "order":
-                    handler_response = order_handler.handle(user_message)
-                    response_data = {
-                        "type": "chat_response",
-                        "response": handler_response["response"],
-                        "response_en": handler_response["response_en"],
-                        "response_ur": handler_response["response_ur"],
-                        "restaurant_name": "Vocabite Assistant",
-                        "confidence": 1.0,
-                        "suggestions": handler_response.get("suggestions", []),
-                        "response_type": "order_placeholder"
-                    }
-                    await websocket.send_text(json.dumps(response_data))
-                    continue # Skip RAG
-
-                # Process with RAG system
-                rag_result = rag_system.process_query(user_message)
+                # 1. RAG Context Retrieval (Offload to thread)
+                rag_result = await asyncio.to_thread(rag_system.process_query, text)
+                context = rag_result.get('context', '')
                 
-                # Log context retrieval for debugging
-                context_length = len(rag_result.get('context', ''))
-                print(f"📊 [WS] RAG Context Length: {context_length} characters")
+                # 2. Dual LLM Response (Async combined call)
+                responses = await llm_service.generate_dual_response(text, context)
+                resp_en = responses['en']
+                resp_ur = responses['ur']
                 
-                # Build prompt for LLM
-                detected_restaurants = rag_result.get('detected_restaurants', [])
-                query_type_rag = rag_result.get('query_type', 'general')
+                detected = rag_result.get('detected_restaurants', [])
                 
-                # Generate English response with context
-                llm_response_en = llm_service.generate_response(
-                    user_message=user_message,
-                    context=rag_result['context']
-                )
-                
-                # Generate Urdu translation
-                llm_response_ur = llm_service.generate_response(
-                    user_message=f"Translate this to Urdu (keep it natural and conversational):\n\n{llm_response_en}"
-                )
-                
-                # Determine primary restaurant for response
-                detected_restaurants = rag_result.get('detected_restaurants', [])
-                if detected_restaurants:
-                    primary_restaurant = detected_restaurants[0]['name']
-                    confidence = detected_restaurants[0]['confidence']
-                else:
-                    primary_restaurant = "Multiple Restaurants"
-                    confidence = 1.0
-                
-                # Send response back to client
-                response_data = {
+                await websocket.send_text(json.dumps({
                     "type": "chat_response",
-                    "response": llm_response_en,  # backward compatible
-                    "response_en": llm_response_en,
-                    "response_ur": llm_response_ur,
-                    "restaurant_name": primary_restaurant,
-                    "confidence": confidence,
-                    "suggestions": rag_result["suggestions"],
+                    "response": resp_en,
+                    "response_en": resp_en,
+                    "response_ur": resp_ur,
+                    "restaurant_name": detected[0]['name'] if detected else "Assistant",
+                    "confidence": detected[0]['confidence'] if detected else 1.0,
+                    "suggestions": rag_result.get("suggestions", []),
                     "response_type": "chat"
-                }
-                
-                await websocket.send_text(json.dumps(response_data))
-                
-            # Restaurant switching is now handled automatically in multi-restaurant queries
-                
+                }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        print("🔌 WS Disconnected")
     except Exception as e:
-        print(f"❌ WebSocket error: {e}")
-        error_data = {
-            "type": "error",
-            "message": str(e)
-        }
-        await websocket.send_text(json.dumps(error_data))
+        print(f"❌ WS Error: {e}")
+        await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
 
 if __name__ == "__main__":
-    import uvicorn
-    
-    host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
-    debug = os.getenv("DEBUG", "False").lower() == "true"
-    
-    print(f"🚀 Starting Multi-Restaurant RAG Voice Assistant on {host}:{port}")
-    
-    uvicorn.run(
-        "main:app",
-        host=host,
-        port=port,
-        reload=debug,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
