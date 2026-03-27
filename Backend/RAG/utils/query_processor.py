@@ -18,7 +18,10 @@ class QueryProcessor:
         'can you', 'could you', 'would you', 'will you',
         'tell me', 'let me know', 'i want', 'i need', 'i would like',
         'show me', 'give me', 'help me', 'i am looking for',
-        'do you have', 'is there', 'are there'
+        'do you have', 'is there', 'are there',
+        # Roman Urdu/Hindi fillers
+        'yaar', 'batao', 'dikhao', 'mujhe', 'bataen', 'dikhaen',
+        'kya', 'hai', 'hain', 'mein', 'se', 'ka', 'ki', 'ke'
     }
     
     # Food-related synonyms for query expansion

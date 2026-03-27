@@ -216,6 +216,33 @@ def search_similar(
         conn.close()
 
 
+def get_restaurant_chunks(restaurant_id: str) -> List[Dict[str, Any]]:
+    """Return all chunks for a specific restaurant_id, ordered by chunk_index."""
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    restaurant_id,
+                    restaurant_name,
+                    chunk_index,
+                    content,
+                    meta_tag,
+                    pdf_filename,
+                    1.0 AS similarity -- No vector comparison here, so use base similarity
+                FROM restaurant_embeddings
+                WHERE restaurant_id = %s
+                ORDER BY chunk_index ASC
+                """,
+                (restaurant_id,),
+            )
+            rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_all_restaurant_ids() -> List[str]:
     """Return distinct restaurant IDs that have embeddings in NeonDB."""
     conn = _get_conn()

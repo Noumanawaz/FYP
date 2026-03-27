@@ -21,24 +21,26 @@ export interface ChatbotResponse {
 const getChatbotBaseUrl = (): string => {
   const ragUrl = getEnvVar('VITE_RAG_BASE_URL', '');
   if (ragUrl) return ragUrl;
-  
+
   // Fallback: try to derive from API base URL (remove /api/v1 if present)
   const apiUrl = getEnvVar('VITE_API_BASE_URL', '');
   if (apiUrl) {
     // Remove /api/v1 suffix if present, or use as-is
     return apiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
   }
-  
+
   // Final fallback
   return 'http://localhost:8000';
 };
 
 class ChatbotService {
   private baseUrl: string;
+  private sessionId: string;
   private conversationHistory: ChatbotMessage[] = [];
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getChatbotBaseUrl();
+    this.sessionId = `session_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
   }
 
   async sendMessage(message: string): Promise<ChatbotResponse> {
@@ -57,6 +59,7 @@ class ChatbotService {
         },
         body: JSON.stringify({
           message,
+          session_id: this.sessionId,
         }),
       });
 

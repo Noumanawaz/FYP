@@ -25,34 +25,36 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 
+# Global instances
+rag_system = None
+llm_service = None
+db_builder = None
+session_manager = None
+orchestrator = None
+
 # Lifespan context manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global rag_system, llm_service, db_builder
+    global rag_system, llm_service, db_builder, session_manager, orchestrator
     
     print("🚀 Starting Multi-Restaurant RAG Voice Assistant...")
     
     try:
-        # Initialize RAG system
+        # 1. Base Services
         rag_system = MultiRestaurantRAGSystem()
-        print(f"✅ RAG initialized. Vector DB: {rag_system.use_vector_db}")
-        
-        # Ensure NeonDB schema is up to date
+        llm_service = OpenAILLMService()
+        db_builder = VectorDBBuilder()
         neon_vector_store.setup_table()
         
-        # Initialize LLM service (OpenAI)
-        llm_service = OpenAILLMService()
-        print(f"✅ LLM initialized with model: {llm_service.model}")
+        # 2. Advanced Orchestration
+        session_manager = SessionManager()
+        orchestrator = OrchestratorService(llm_service, rag_system, session_manager)
         
-        # Initialize Vector DB Builder for ingestion
-        db_builder = VectorDBBuilder()
-        print("✅ Vector DB Builder initialized for ingestion")
-        
+        print("✅ System Core, RAG & Orchestrator ready.")
     except Exception as e:
         print(f"❌ Error during startup: {e}")
         
     yield
-    # Shutdown logic can go here if needed
     print("👋 Shutting down Multi-Restaurant RAG Voice Assistant...")
 
 # Initialize FastAPI app with lifespan
@@ -70,11 +72,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global instances
-rag_system = None
-llm_service = None
-db_builder = None
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -109,44 +106,35 @@ class ChatResponse(BaseModel):
 @app.get("/health")
 async def health_check():
     return {
-        "status": "healthy" if rag_system and llm_service else "initializing",
+        "status": "healthy" if orchestrator else "initializing",
         "rag": "ready" if rag_system else "pending",
-        "llm": "ready" if llm_service else "pending"
+        "orchestrator": "ready" if orchestrator else "pending"
     }
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    if not rag_system or not llm_service:
+    if not orchestrator:
         raise HTTPException(status_code=503, detail="System initializing")
     
     try:
         print(f"💬 Chat: {request.message}")
         
-        # 1. RAG Context Retrieval (Offload to thread to keep loop free)
-        rag_result = await asyncio.to_thread(rag_system.process_query, request.message)
-        context = rag_result.get('context', '')
-        
-        # 2. Dual LLM Response (EN + UR in one call)
-        responses = await llm_service.generate_dual_response(request.message, context)
-        llm_response_en = responses['en']
-        llm_response_ur = responses['ur']
-        
-        # Metadata
-        detected = rag_result.get('detected_restaurants', [])
-        primary_restaurant = detected[0]['name'] if detected else "Assistant"
-        confidence = detected[0]['confidence'] if detected else 1.0
+        # Delegate to Orchestrator (which handles Agents)
+        result = await orchestrator.handle_query(request.message, request.session_id)
         
         return ChatResponse(
-            response=llm_response_en,
-            response_en=llm_response_en,
-            response_ur=llm_response_ur,
-            restaurant_name=primary_restaurant,
-            confidence=confidence,
-            suggestions=rag_result.get("suggestions", []),
-            response_type="chat"
+            response=result.get("response", ""),
+            response_en=result.get("response_en", ""),
+            response_ur=result.get("response_ur", ""),
+            restaurant_name=result.get("restaurant_name", "Assistant"),
+            confidence=result.get("confidence", 1.0),
+            suggestions=result.get("suggestions", []),
+            response_type=result.get("response_type", "chat")
         )
     except Exception as e:
         print(f"❌ Chat Error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ingest-restaurant")
@@ -214,27 +202,20 @@ async def websocket_endpoint(websocket: WebSocket):
             
             if msg.get("type") == "chat":
                 text = msg.get("message", "")
+                session_id = msg.get("session_id", "default_session")
                 
-                # 1. RAG Context Retrieval (Offload to thread)
-                rag_result = await asyncio.to_thread(rag_system.process_query, text)
-                context = rag_result.get('context', '')
-                
-                # 2. Dual LLM Response (Async combined call)
-                responses = await llm_service.generate_dual_response(text, context)
-                resp_en = responses['en']
-                resp_ur = responses['ur']
-                
-                detected = rag_result.get('detected_restaurants', [])
+                # Use Orchestrator
+                result = await orchestrator.handle_query(text, session_id)
                 
                 await websocket.send_text(json.dumps({
                     "type": "chat_response",
-                    "response": resp_en,
-                    "response_en": resp_en,
-                    "response_ur": resp_ur,
-                    "restaurant_name": detected[0]['name'] if detected else "Assistant",
-                    "confidence": detected[0]['confidence'] if detected else 1.0,
-                    "suggestions": rag_result.get("suggestions", []),
-                    "response_type": "chat"
+                    "response": result.get("response", ""),
+                    "response_en": result.get("response_en", ""),
+                    "response_ur": result.get("response_ur", ""),
+                    "restaurant_name": result.get("restaurant_name", "Assistant"),
+                    "confidence": result.get("confidence", 1.0),
+                    "suggestions": result.get("suggestions", []),
+                    "response_type": result.get("response_type", "chat")
                 }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)

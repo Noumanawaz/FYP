@@ -18,22 +18,31 @@ class OpenAILLMService:
         self.temperature = float(os.getenv('TEMPERATURE', '0.7'))
         self.max_tokens = int(os.getenv('MAX_TOKENS', '800')) # Increased for dual response
 
+        # Initialize persistent client for production efficiency
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=25.0
+        )
+
         # Check if API key is properly configured
         if not self.api_key or self.api_key.strip() in ['your_openai_api_key_here', '']:
-            print("⚠️  OpenAI API key not configured. Using fallback responses.")
+            print("⚠️ OpenAI API key not configured. Using fallback responses.")
             self.api_configured = False
         else:
             self.api_configured = True
             print(f"✅ Using OpenAI model: {self.model}")
-        print(f"ℹ️  OpenAI base_url: {self.base_url}")
+        print(f"ℹ️ OpenAI base_url: {self.base_url}")
 
     async def _call_openai_async(self, messages: List[Dict], max_tokens: Optional[int] = None, response_format: Optional[Dict] = None) -> str:
-        """Async call to OpenAI API using httpx"""
+        """Async call to OpenAI API using persistent httpx client"""
         if not self.api_configured:
             return ""
 
+        import time
+        start_t = time.time()
         tokens = max_tokens or self.max_tokens
-        print(f"➡️  Calling OpenAI (Async) /chat/completions | model={self.model}")
+        print(f"➡️ [LLM] Calling OpenAI Async ({self.model})...")
         
         payload = {
             "model": self.model,
@@ -45,23 +54,19 @@ class OpenAILLMService:
             payload["response_format"] = response_format
 
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                    timeout=20.0
-                )
-                
-                if resp.status_code == 200:
-                    result = resp.json()
-                    if 'choices' in result and result['choices']:
-                        return result['choices'][0]['message']['content'].strip()
-                else:
-                    print(f"❌ OpenAI API error {resp.status_code}: {resp.text}")
+            resp = await self.client.post(
+                "/chat/completions",
+                json=payload
+            )
+            
+            print(f"⏱️ [LLM] OpenAI responded in {time.time() - start_t:.2f}s (Status: {resp.status_code})")
+            
+            if resp.status_code == 200:
+                result = resp.json()
+                if 'choices' in result and result['choices']:
+                    return result['choices'][0]['message']['content'].strip()
+            else:
+                print(f"❌ OpenAI API error {resp.status_code}: {resp.text}")
         except Exception as e:
             print(f"❌ Error calling OpenAI async: {e}")
             
@@ -126,13 +131,14 @@ Example:
         
         # Build user message with context
         if context:
-            user_prompt = f"Customer asked: \"{user_message}\"\n\nMenu info:\n{context}"
+            user_prompt = f"Customer asked: \"{user_message}\"\n\nContext/Menu info:\n{context}"
         else:
             user_prompt = user_message
         
         messages = [{"role": "system", "content": system_prompt}]
         if conversation_history:
-            for msg in conversation_history[-4:]: # Use fewer history items for speed
+            # Increased history window from 4 to 10 for better memory of names/context
+            for msg in conversation_history[-10:]:
                 messages.append(msg)
         messages.append({"role": "user", "content": user_prompt})
 
@@ -203,34 +209,39 @@ Example:
         base_prompt = """You are a professional restaurant voice assistant. 
 
 Your goals:
-- Answer customer questions naturally and concisely (1-2 sentences).
-- Use the provided menu information to answer accurately.
+- Answer customer questions naturally and concisely.
+- For general questions, keep it to 1-2 sentences. 
+- If the customer asks for options, a menu, or a list, you can list the key items and their prices based on context.
+- Prioritize menu information from the provided context (RESTAURANT INFO).
+- If the customer provided their name or other info earlier in the session summary/history, remember and use it!
 - ALWAYS include prices from the menu naturally.
 - NO markdown formatting (no **bold**, no bullet points with - or *).
 - Use only the English alphabet for English responses.
 
 CRITICAL: 
-- Provide high-quality, professional, and helpful responses.
-- Be extremely polite and efficient."""
+- You ARE a voice assistant that CAN take orders. If a user wants to order, guide them to confirmation.
+- Be extremely polite, professional, and helpful. 
+- Avoid mentioning you don't have personal info if the user literally JUST told you their name. Use the summary!
+"""
 
         return base_prompt
     
-    def generate_summary(self, existing_summary: str, new_messages: List[Dict]) -> str:
-        """Generate a concise, factual summary of the conversation so far"""
+    async def generate_summary(self, existing_summary: str, new_messages: List[Dict]) -> str:
+        """Generate a concise, factual summary of the conversation so far (Async)"""
         if not self.api_configured:
             return existing_summary
 
         messages_text = "\n".join([f"{m['role']}: {m['content']}" for m in new_messages])
         
-        prompt = f"""Existing Summary: "{existing_summary}"\n\nNew messages:\n{messages_text}\n\nUpdate the summary briefly (1-2 sentences). Return ONLY the new summary."""
+        prompt = f"""Existing Summary: "{existing_summary}"\n\nNew messages:\n{messages_text}\n\nUpdate the summary briefly (1-2 sentences) about the customer's needs. Return ONLY the new summary."""
 
         messages = [
-            {"role": "system", "content": "You are a factual summarization assistant."},
+            {"role": "system", "content": "You are a factual summarization assistant. Update summaries concisely."},
             {"role": "user", "content": prompt}
         ]
         
         try:
-            response = self._call_openai(messages, max_tokens=150)
+            response = await self._call_openai_async(messages, max_tokens=150)
             return response.strip()
         except Exception as e:
             print(f"⚠️ Summary failed: {e}")

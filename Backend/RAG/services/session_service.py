@@ -6,7 +6,7 @@ class SessionManager:
     def __init__(self, ttl_seconds: int = 3600):
         self.sessions: Dict[str, Dict] = {}
         self.ttl_seconds = ttl_seconds
-        self.lock = threading.Lock()
+        self.lock = threading.RLock() # Use Recursive Lock to prevent deadlocks
 
     def get_session(self, session_id: str) -> Dict:
         """Retrieve or create a session"""

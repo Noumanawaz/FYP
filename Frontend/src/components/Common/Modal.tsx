@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,11 +12,11 @@ interface ModalProps {
   maxWidth?: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  title, 
-  children, 
+const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children,
   footer,
   maxWidth = 'max-w-2xl'
 }) => {
@@ -35,17 +36,17 @@ const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6">
           {/* Overlay */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
 
           {/* Modal Container */}
@@ -56,8 +57,8 @@ const Modal: React.FC<ModalProps> = ({
             ref={modalRef}
             className={`relative w-full ${maxWidth} bg-white dark:bg-[#121212] rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-gray-100 dark:border-white/5`}
           >
-            {/* Header */}
-            <div className="flex justify-between items-center p-8 border-b border-gray-100 dark:border-white/5 relative z-10 bg-white/50 dark:bg-[#121212]/50 backdrop-blur-md">
+            {/* Header - Made fully opaque to prevent messy overlap bug */}
+            <div className="flex justify-between items-center p-8 border-b border-gray-100 dark:border-white/5 relative z-10 bg-white dark:bg-[#121212]">
               <div>
                 <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight uppercase">
                   {title}
@@ -87,6 +88,8 @@ const Modal: React.FC<ModalProps> = ({
       )}
     </AnimatePresence>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default Modal;

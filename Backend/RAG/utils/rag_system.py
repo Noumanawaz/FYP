@@ -21,9 +21,8 @@ class MultiRestaurantRAGSystem:
     def __init__(self, data_dir: str = "data", vector_db_dir: str = "vector_db", use_vector_db: bool = True):
         self.data_dir = data_dir
         self.vector_db_dir = vector_db_dir
-        self.use_vector_db = use_vector_db
-        self.restaurant_index = {}
-        self.restaurant_data = {}  # Fallback for JSON mode
+        self.use_vector_db = use_vector_db # Should always be True in production
+        self.restaurant_index = {"restaurants": [], "default_restaurant": "cheezious"}
         
         # Initialize vector DB components
         self.vector_client = None
@@ -36,11 +35,8 @@ class MultiRestaurantRAGSystem:
         self.reranker = Reranker()
         self.context_filter = ContextFilter()
         
-        # Load restaurant index (needed for restaurant detection)
+        # Load restaurant index STRICTLY from DB
         self.load_restaurant_index()
-        
-        # Always load JSON data as fallback/supplement for prices
-        self.load_all_restaurants()
         
         # Try to initialize vector DB
         if self.use_vector_db:
@@ -49,65 +45,56 @@ class MultiRestaurantRAGSystem:
                 print("✅ Vector database initialized")
             except Exception as e:
                 print(f"⚠️  Vector DB initialization failed: {e}")
-                print("⚠️  Falling back to JSON mode")
-                self.use_vector_db = False
-        else:
-            self.load_all_restaurants()
+                # We do NOT fallback to JSON anymore
     
     def _initialize_vector_db(self):
         """Initialize ChromaDB client and collections"""
         if not os.path.exists(self.vector_db_dir):
-            raise FileNotFoundError(f"Vector DB directory not found: {self.vector_db_dir}")
+            # In production, we might want to log this but keep going if NeonDB is primary
+            print(f"⚠️ Vector DB directory not found: {self.vector_db_dir}")
         
-        self.vector_client = chromadb.PersistentClient(
-            path=self.vector_db_dir,
-            settings=Settings(anonymized_telemetry=False)
-        )
-        
-        # Get collections
         try:
-            self.restaurant_collection = self.vector_client.get_collection(name="restaurants")
-            self.index_collection = self.vector_client.get_collection(name="restaurant_index")
-            
-            # Initialize embedding model
-            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            # Check if collections have data
-            restaurant_count = self.restaurant_collection.count()
-            if restaurant_count == 0:
-                raise ValueError("Vector DB collections are empty")
-            
-            print(f"✅ Loaded vector DB with {restaurant_count} chunks")
+            # Initialize embedding model (force CPU for stability on Mac)
+            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+            print(f"✅ Embedding model loaded")
         except Exception as e:
-            raise Exception(f"Failed to load vector DB: {e}")
+            raise Exception(f"Failed to load embedding model: {e}")
     
     def load_restaurant_index(self):
-        """Load the restaurant index file (needed for restaurant detection)"""
+        """Load the restaurant index STRICTLY from NeonDB (restaurant_embeddings table)"""
         try:
-            index_path = os.path.join(self.data_dir, "restaurant_index.json")
-            with open(index_path, 'r', encoding='utf-8') as f:
-                self.restaurant_index = json.load(f)
-            print(f"✅ Loaded restaurant index with {len(self.restaurant_index['restaurants'])} restaurants")
+            # Clear existing index to ensure consistency with DB
+            self.restaurant_index = {"restaurants": [], "default_restaurant": "cheezious"}
+            
+            # Load from NeonDB
+            try:
+                # We need names and IDs from restaurant_embeddings table
+                conn = neon_vector_store._get_conn()
+                with conn.cursor() as cur:
+                    cur.execute("SELECT DISTINCT restaurant_id, restaurant_name FROM restaurant_embeddings")
+                    db_restaurants = cur.fetchall()
+                conn.close()
+
+                for rid, rname in db_restaurants:
+                    name_clean = rname.strip()
+                    self.restaurant_index["restaurants"].append({
+                        "id": rid,
+                        "name": name_clean,
+                        "keywords": [name_clean.lower(), rid.lower()],
+                        "dynamic": True
+                    })
+                    print(f"✅ Synced {name_clean} from database to RAG index")
+            except Exception as e:
+                print(f"❌ Failed to fetch restaurants from DB: {e}")
+
+            print(f"✅ Loaded total of {len(self.restaurant_index['restaurants'])} restaurants from database")
         except Exception as e:
             print(f"❌ Error loading restaurant index: {e}")
             self.restaurant_index = {"restaurants": [], "default_restaurant": "cheezious"}
     
     def load_all_restaurants(self):
-        """Load all restaurant data files into memory (fallback for JSON mode)"""
-        try:
-            for restaurant in self.restaurant_index.get("restaurants", []):
-                restaurant_id = restaurant["id"]
-                file_path = os.path.join(self.data_dir, restaurant["file"])
-                
-                if os.path.exists(file_path):
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        self.restaurant_data[restaurant_id] = json.load(f)
-                    print(f"✅ Loaded {restaurant['name']} data from JSON")
-                else:
-                    print(f"❌ Restaurant file not found: {file_path}")
-            
-        except Exception as e:
-            print(f"❌ Error loading restaurant data: {e}")
+        """No longer used as we are strictly DB-only"""
+        pass
     
     def detect_restaurants_in_query(self, query: str) -> List[Dict]:
         """
@@ -389,23 +376,48 @@ class MultiRestaurantRAGSystem:
                 print(f"❌ Error in comprehensive search: {e}")
                 retrieved_chunks = []
             
-            # Group chunks by restaurant
+            # Group similarity chunks by restaurant
             restaurant_chunks = {}
             for chunk in retrieved_chunks:
                 rid = chunk["restaurant_id"]
                 if rid not in restaurant_chunks:
                     restaurant_chunks[rid] = []
                 restaurant_chunks[rid].append(chunk)
-            
+
             # Build results structure
             for rid in restaurant_ids:
-                chunks = restaurant_chunks.get(rid, [])
+                # Find the name for this rid
                 restaurant_name = next(
                     (r["name"] for r in self.restaurant_index.get("restaurants", []) if r["id"] == rid),
                     rid
                 )
                 
-                # Extract information from chunks
+                # Determine if we should get ALL chunks (broad query)
+                is_broad_query = any(kw in query.lower() for kw in ['menu', 'options', 'list', 'all', 'what do you have', 'items'])
+                
+                chunks = []
+                if is_broad_query:
+                    print(f"📄 Fetching ALL chunks for {restaurant_name} (Broad Query)")
+                    chunks = neon_vector_store.get_restaurant_chunks(rid)
+                else:
+                    # Filter retrieved chunks for this restaurant
+                    chunks = restaurant_chunks.get(rid, [])
+                    # If few chunks, supplement slightly
+                    if len(chunks) < 3:
+                        more_chunks = neon_vector_store.get_restaurant_chunks(rid)
+                        
+                        # Helper to get chunk index correctly regardless of source
+                        def get_idx(c):
+                            if 'chunk_index' in c: return c['chunk_index']
+                            return c.get('metadata', {}).get('chunk_index')
+                            
+                        existing_indices = {get_idx(c) for c in chunks if get_idx(c) is not None}
+                        for mc in more_chunks:
+                            if mc.get('chunk_index') not in existing_indices:
+                                chunks.append(mc)
+                                if len(chunks) >= 8: break
+                
+                # Extract meta info
                 menu_items = []
                 deals = []
                 general_info = {}
@@ -413,171 +425,35 @@ class MultiRestaurantRAGSystem:
                 
                 for chunk in chunks:
                     content = chunk["content"]
-                    meta_tag = chunk.get("meta_tag")
-                    
-                    # 1. Use meta_tag for primary categorization
-                    if meta_tag == "menu items":
-                        # Further refine: is it a deal or regular item?
-                        is_deal = any(word in content.lower() for word in ["deal", "offer", "combo", "special", "promotion"])
-                        if is_deal:
-                            deals.append({
-                                "name": "Special Deal",
-                                "description": content,
-                                "relevance": chunk["similarity"]
-                            })
+                    tag = chunk.get("meta_tag")
+                    if tag == "menu items":
+                        if any(w in content.lower() for w in ["deal", "offer", "combo"]):
+                            deals.append({"name": "Deal", "description": content})
                         else:
-                            # Try to extract price
-                            price_match = re.search(r'rs\.?\s*(\d+)', content, re.IGNORECASE)
-                            price = f"Rs. {price_match.group(1)}" if price_match else "Price N/A"
-                            menu_items.append({
-                                "name": "Menu Item",
-                                "price": price,
-                                "description": content,
-                                "relevance": chunk["similarity"]
-                            })
-                    elif meta_tag in ["general information", "restaurant identity"]:
+                            price_m = re.search(r'rs\.?\s*(\d+)', content.lower())
+                            price = f"Rs. {price_m.group(1)}" if price_m else "Price N/A"
+                            menu_items.append({"name": "Item", "price": price, "description": content})
+                    elif tag in ["general information", "restaurant identity"]:
                         general_info[f"info_{len(general_info)}"] = content
-                    elif meta_tag == "location information":
+                    elif tag == "location information":
                         location_info[f"info_{len(location_info)}"] = content
-                    
-                    # 2. Fallback to keyword-based detection if meta_tag is missing or generic
-                    else:
-                        if any(word in content.lower() for word in ["price", "rs", "rupee", "cost"]):
-                            price_match = re.search(r'rs\.?\s*(\d+)', content, re.IGNORECASE)
-                            price = f"Rs. {price_match.group(1)}" if price_match else "Price N/A"
-                            menu_items.append({
-                                "name": "Menu Item (Detected)",
-                                "price": price,
-                                "description": content,
-                                "relevance": chunk["similarity"]
-                            })
-                        
-                        if any(word in content.lower() for word in ["deal", "offer", "combo", "special", "promotion"]):
-                            deals.append({
-                                "name": "Deal (Detected)",
-                                "description": content,
-                                "relevance": chunk["similarity"]
-                            })
                 
                 comprehensive_results["results"][rid] = {
                     "name": restaurant_name,
                     "data": {
-                        "menu_items": menu_items[:10],  # Top 10
-                        "deals": deals[:5],  # Top 5
+                        "menu_items": menu_items[:15],
+                        "deals": deals[:10],
                         "general_info": general_info,
                         "location_info": location_info,
-                        "chunks": chunks  # Include raw chunks for context building
+                        "chunks": chunks
                     }
-                }
-        else:
-            # Fallback to JSON search (original implementation)
-            for restaurant_id in restaurant_ids:
-                if restaurant_id not in self.restaurant_data:
-                    continue
-                    
-                restaurant_data = self.restaurant_data[restaurant_id]
-                restaurant_name = restaurant_data.get("brand", {}).get("name", restaurant_id)
-                
-                # Search different types of information
-                results = {
-                    "menu_items": [],
-                    "deals": [],
-                    "general_info": {},
-                    "location_info": {},
-                    "pricing_info": []
-                }
-                
-                # Search menu items
-                query_lower = query.lower()
-                menu = restaurant_data.get("menu", {})
-                for section_name, section_items in menu.items():
-                    if isinstance(section_items, list):
-                        for item in section_items:
-                            relevance = self._calculate_relevance(query_lower, item)
-                            if relevance > 0:
-                                results["menu_items"].append({
-                                    "section": section_name,
-                                    "item": item,
-                                    "relevance": relevance
-                                })
-                    elif isinstance(section_items, dict):
-                        for subsection_name, subsection_items in section_items.items():
-                            if isinstance(subsection_items, list):
-                                for item in subsection_items:
-                                    relevance = self._calculate_relevance(query_lower, item)
-                                    if relevance > 0:
-                                        results["menu_items"].append({
-                                            "section": f"{section_name} - {subsection_name}",
-                                            "item": item,
-                                            "relevance": relevance
-                                        })
-                
-                # Search deals
-                if "deals" in menu:
-                    for deal_category, deals in menu["deals"].items():
-                        if isinstance(deals, list):
-                            for deal in deals:
-                                if self._calculate_relevance(query_lower, deal) > 0:
-                                    results["deals"].append({
-                                        "category": deal_category,
-                                        "deal": deal
-                                    })
-                
-                # Extract general information
-                brand = restaurant_data.get("brand", {})
-                results["general_info"] = {
-                    "name": brand.get("name", ""),
-                    "description": brand.get("description", ""),
-                    "founded": brand.get("founded", ""),
-                    "country": brand.get("country", ""),
-                    "usp": brand.get("usp", [])
-                }
-                
-                # Extract location information
-                branches = restaurant_data.get("branches", {})
-                results["location_info"] = {
-                    "cities": branches.get("cities", []),
-                    "hours": branches.get("hours", ""),
-                    "total_branches": branches.get("total_branches", "")
-                }
-                
-                # Sort results by relevance
-                results["menu_items"].sort(key=lambda x: x["relevance"], reverse=True)
-                
-                comprehensive_results["results"][restaurant_id] = {
-                    "name": restaurant_name,
-                    "data": results
                 }
         
         return comprehensive_results
     
     def _calculate_relevance(self, query: str, item: Dict) -> float:
-        """Calculate relevance score for a menu item or information (for JSON fallback)"""
+        """Calculate relevance score for a menu item or information"""
         score = 0.0
-        
-        # Check item name
-        item_name = item.get("name", "").lower()
-        if query in item_name:
-            score += 10.0
-        elif any(word in item_name for word in query.split()):
-            score += 5.0
-        
-        # Check description
-        description = item.get("description", "").lower()
-        if query in description:
-            score += 3.0
-        elif any(word in description for word in query.split()):
-            score += 1.5
-        
-        # Check for specific query types
-        if any(word in query for word in ["deal", "offer", "combo", "special"]):
-            if "deal" in item_name or "special" in item_name or "combo" in item_name:
-                score += 5.0
-        
-        if any(word in query for word in ["price", "cost", "rs", "rupee"]):
-            if item.get("price"):
-                score += 2.0
-        
         return score
     
     def build_comprehensive_context(self, search_results: Dict, focus_restaurant: Optional[str] = None) -> str:
@@ -619,18 +495,19 @@ class MultiRestaurantRAGSystem:
                     )
                     
                     # Select top chunks with diversity (avoid duplicates)
-                    # Use top 2 most relevant chunks for brief, focused responses
                     selected_chunks = []
                     seen_content_prefixes = set()
                     
+                    # For broad queries, we include more context
+                    is_broad_query = any(kw in query for kw in ['menu', 'options', 'list', 'all', 'what do you have'])
+                    max_chunks = 15 if is_broad_query else 5
+                    
                     for chunk in scored_chunks:
-                        # Get first 150 chars as signature to avoid near-duplicates
-                        content_sig = chunk["content"][:150].lower()
+                        content_sig = chunk["content"][:100].lower()
                         if content_sig not in seen_content_prefixes:
                             selected_chunks.append(chunk)
                             seen_content_prefixes.add(content_sig)
-                            # Limit to 3 most relevant chunks for complete information
-                            if len(selected_chunks) >= 3:
+                            if len(selected_chunks) >= max_chunks:
                                 break
                     
                     if selected_chunks:
@@ -642,17 +519,6 @@ class MultiRestaurantRAGSystem:
                         # This helps the LLM extract prices better
                         relevant_text = re.sub(r'Rs\.\s*,\s*(\d+)', r'Rs. \1', relevant_text)
                         
-                        # Check if prices are missing (only "Rs. ," or "Rs. " without numbers)
-                        has_complete_prices = bool(re.search(r'Rs\.\s*\d+', relevant_text, re.IGNORECASE))
-                        
-                        # If prices are missing, supplement with JSON data
-                        if not has_complete_prices and restaurant_id in self.restaurant_data:
-                            print(f"  ⚠️  Prices missing in vector DB, supplementing with JSON data...")
-                            json_supplement = self._extract_json_prices(restaurant_id, query)
-                            if json_supplement:
-                                relevant_text += "\n\n---\n\n" + json_supplement
-                                print(f"  ✅ Added JSON price data")
-                        
                         if relevant_text:
                             context_parts.append(relevant_text)
                             print(f"  ✅ Added {len(relevant_text)} characters of context")
@@ -660,41 +526,6 @@ class MultiRestaurantRAGSystem:
                         print(f"  ⚠️  No diverse chunks selected for {restaurant_name}")
                 else:
                     print(f"  ⚠️  No chunks found for {restaurant_name}")
-            else:
-                # JSON mode - use structured data
-                # Add general info
-                general = data.get("general_info", {})
-                if general.get("description"):
-                    context_parts.append(f"Description: {general['description']}")
-                if general.get("founded"):
-                    context_parts.append(f"Founded: {general['founded']}")
-                
-                # Add location info
-                location = data.get("location_info", {})
-                if location.get("cities"):
-                    context_parts.append(f"Available in: {', '.join(location['cities'][:5])}{'...' if len(location['cities']) > 5 else ''}")
-                if location.get("hours"):
-                    context_parts.append(f"Hours: {location['hours']}")
-                
-                # Add relevant menu items
-                menu_items = data.get("menu_items", [])
-                if menu_items:
-                    context_parts.append("Relevant Menu Items:")
-                    for item_info in menu_items[:5]:  # Top 5 most relevant
-                        item = item_info.get("item", {})
-                        context_parts.append(f"• {item.get('name', 'Item')} - {item.get('price', 'Price N/A')}")
-                        if item.get('description'):
-                            context_parts.append(f"  {item['description']}")
-                
-                # Add deals
-                deals = data.get("deals", [])
-                if deals:
-                    context_parts.append("Available Deals:")
-                    for deal_info in deals[:3]:  # Top 3 deals
-                        deal = deal_info.get("deal", {})
-                        context_parts.append(f"• {deal.get('name', 'Deal')} - {deal.get('price', 'Price N/A')}")
-                        if deal.get('description'):
-                            context_parts.append(f"  {deal['description']}")
             
             context_parts.append("")  # Empty line between restaurants
         
@@ -739,53 +570,22 @@ class MultiRestaurantRAGSystem:
                     },
                     "relevance": chunk["similarity"]
                 })
-        else:
-            # JSON fallback
-            for rid in target_ids:
-                if rid not in self.restaurant_data:
-                    continue
-                    
-                restaurant_data = self.restaurant_data.get(rid, {})
-                restaurant_name = restaurant_data.get("brand", {}).get("name", rid)
-                menu = restaurant_data.get("menu", {})
-
-                for section_name, section_items in menu.items():
-                    if isinstance(section_items, list):
-                        for item in section_items:
-                            relevance = self._calculate_relevance(query_lower, item)
-                            if relevance > 0:
-                                results.append({
-                                    "restaurant_id": rid,
-                                    "restaurant_name": restaurant_name,
-                                    "section": section_name,
-                                    "item": item,
-                                    "relevance": relevance
-                                })
-                    elif isinstance(section_items, dict):
-                        for subsection_name, subsection_items in section_items.items():
-                            if isinstance(subsection_items, list):
-                                for item in subsection_items:
-                                    relevance = self._calculate_relevance(query_lower, item)
-                                    if relevance > 0:
-                                        results.append({
-                                            "restaurant_id": rid,
-                                            "restaurant_name": restaurant_name,
-                                            "section": f"{section_name} - {subsection_name}",
-                                            "item": item,
-                                            "relevance": relevance
-                                        })
-
         results.sort(key=lambda x: x["relevance"], reverse=True)
         return results
     
-    def process_query(self, query: str) -> Dict:
+    def process_query(self, query: str, summary: str = "") -> Dict:
         """
         Main method to process multi-restaurant queries
         """
         # Detect restaurants mentioned in the query
         detected_restaurants = self.detect_restaurants_in_query(query)
         
-        # If no restaurants detected, search all restaurants
+        # If no restaurants detected in query, check summary
+        if not detected_restaurants and summary:
+            print(f"🔍 No restaurant in query, checking summary: '{summary[:50]}...'")
+            detected_restaurants = self.detect_restaurants_in_query(summary)
+            
+        # If still no restaurants detected, search all restaurants
         if not detected_restaurants:
             restaurant_ids = [r["id"] for r in self.restaurant_index.get("restaurants", [])]
             print("⚠️  No specific restaurants detected, searching all restaurants")
@@ -825,56 +625,6 @@ class MultiRestaurantRAGSystem:
             "suggestions": suggestions,
             "query_type": self._classify_query_type(query)
         }
-    
-    def _extract_json_prices(self, restaurant_id: str, query: str) -> str:
-        """Extract price information from JSON data to supplement vector DB"""
-        if restaurant_id not in self.restaurant_data:
-            return ""
-        
-        restaurant_data = self.restaurant_data[restaurant_id]
-        menu = restaurant_data.get("menu", {})
-        query_lower = query.lower()
-        
-        # Determine what to extract based on query
-        asking_about_deals = any(kw in query_lower for kw in ['deal', 'offer', 'combo', 'special'])
-        asking_about_prices = any(kw in query_lower for kw in ['price', 'prices', 'cost', 'how much'])
-        
-        price_info = []
-        
-        # Extract deals if asking about deals
-        if asking_about_deals and "deals" in menu:
-            for deal_type, deals in menu["deals"].items():
-                if isinstance(deals, list):
-                    for deal in deals:
-                        name = deal.get("name", "")
-                        price = deal.get("price", "")
-                        desc = deal.get("description", "")
-                        if price:
-                            price_info.append(f"{name}: {price}" + (f" - {desc}" if desc else ""))
-        
-        # Extract menu items with prices if asking about prices
-        if asking_about_prices:
-            for section_name, section_items in menu.items():
-                if section_name == "deals":
-                    continue
-                if isinstance(section_items, list):
-                    for item in section_items[:5]:  # Limit to top 5
-                        name = item.get("name", "")
-                        price = item.get("price", "")
-                        if price:
-                            price_info.append(f"{name}: {price}")
-                elif isinstance(section_items, dict):
-                    for subsection_name, subsection_items in section_items.items():
-                        if isinstance(subsection_items, list):
-                            for item in subsection_items[:3]:  # Limit to top 3 per subsection
-                                name = item.get("name", "")
-                                price = item.get("price", "")
-                                if price:
-                                    price_info.append(f"{name}: {price}")
-        
-        if price_info:
-            return "Price Information:\n" + "\n".join(price_info)
-        return ""
     
     def _classify_query_type(self, query: str) -> str:
         """Classify the type of query"""
