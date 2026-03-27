@@ -458,6 +458,137 @@ class VectorDBBuilder:
             "neon_synced": neon_count > 0
         }
 
+    def ingest_from_json(self, data: dict, restaurant_id: str, restaurant_name: str) -> dict:
+        """
+        Ingest a restaurant directly from structured JSON data.
+        Produces perfectly tagged chunks — no PDF parsing required.
+        Works for any number of restaurants dynamically.
+        """
+        print(f"📥 [JSON Ingest] Building structured chunks for {restaurant_name} ({restaurant_id})")
+        chunks = []   # list of (content: str, tag: str)
+
+        # ── Chunk 1: Restaurant Identity ─────────────────────────────────────
+        identity_lines = [f"[SECTION: RESTAURANT IDENTITY]", f"Name: {data.get('name', restaurant_name)}"]
+        if data.get('country'): identity_lines.append(f"Country: {data['country']}")
+        if data.get('price_range'): identity_lines.append(f"Price Range: {data['price_range']}")
+        if data.get('founded_year'): identity_lines.append(f"Founded: {data['founded_year']}")
+        if data.get('categories'): identity_lines.append(f"Cuisine: {', '.join(data['categories'])}")
+        if data.get('specialties'): identity_lines.append(f"Specialties: {', '.join(data['specialties'])}")
+        if data.get('keywords'): identity_lines.append(f"Keywords: {', '.join(data['keywords'])}")
+        if data.get('food_categories'): identity_lines.append(f"Food Categories: {', '.join(data['food_categories'])}")
+        chunks.append(("\n".join(identity_lines), "restaurant identity"))
+
+        # ── Chunk 2: Location Information ─────────────────────────────────────
+        branches = data.get('branches', [])
+        if branches:
+            loc_lines = [f"[SECTION: LOCATION INFORMATION]", f"Total Branches: {len(branches)}"]
+            for i, b in enumerate(branches, 1):
+                area = b.get('area', '')
+                city = b.get('city', '')
+                loc_lines.append(f"Branch {i}: {area}, {city}")
+                if b.get('address'): loc_lines.append(f"  Address: {b['address']}")
+                if b.get('phone'): loc_lines.append(f"  Phone: {b['phone']}")
+                if b.get('lat') and b.get('lng'): loc_lines.append(f"  Coordinates: {b['lat']}, {b['lng']}")
+            chunks.append(("\n".join(loc_lines), "location information"))
+
+        # ── Chunk 3+: Menu Categories (with descriptions) ─────────────────────
+        menu_categories = data.get('menuCategories', [])
+        if menu_categories:
+            cat_lines = [f"[SECTION: MENU CATEGORIES]"]
+            for cat in menu_categories:
+                cat_lines.append(f"• {cat.get('name', '')}")
+                if cat.get('description'):
+                    cat_lines.append(f"  {cat['description']}")
+            chunks.append(("\n".join(cat_lines), "menu categories"))
+
+        # ── Chunk 4+: Menu Items (one chunk per category for perfect retrieval) ─
+        menu_items = data.get('menuItems', [])
+        if menu_items:
+            # Build category name lookup
+            cat_map = {c.get('category_id'): c.get('name', 'Other') for c in menu_categories}
+
+            # Group items by category
+            by_category: dict = {}
+            for item in menu_items:
+                cat_name = cat_map.get(item.get('category_id'), 'Other')
+                by_category.setdefault(cat_name, []).append(item)
+
+            for cat_name, items in by_category.items():
+                item_lines = [f"[SECTION: MENU ITEMS]", f"Category: {cat_name}"]
+                for item in items:
+                    name = item.get('name', 'Unknown')
+                    # Always write price in PKR
+                    price = item.get('base_price', 0)
+                    try:
+                        price_val = float(price) if price else 0
+                        if price_val > 0:
+                            price_str = f"PKR {int(price_val)}"
+                        else:
+                            price_str = "Price not set"
+                    except (ValueError, TypeError):
+                        price_str = f"PKR {price}" if price else "Price not set"
+                    item_id = item.get('item_id', '')
+                    item_lines.append(f"\n{name} — {price_str}")
+                    item_lines.append(f"  Item ID: {item_id}")
+                    if item.get('description'): item_lines.append(f"  {item['description']}")
+                    tags = []
+                    if item.get('dietary_tags'): tags.extend(item['dietary_tags'])
+                    if item.get('spice_level') and item['spice_level'] != 'mild': tags.append(f"Spice: {item['spice_level']}")
+                    if item.get('calories'): tags.append(f"{item['calories']} kcal")
+                    if not item.get('is_available', True): tags.append("Currently unavailable")
+                    if tags: item_lines.append(f"  [{', '.join(tags)}]")
+                chunks.append(("\n".join(item_lines), "menu items"))
+
+        if not chunks:
+            return {"success": False, "error": "No content to ingest"}
+
+        contents = [c[0] for c in chunks]
+        meta_tags = [c[1] for c in chunks]
+
+        # Generate embeddings
+        print(f"🧮 [JSON Ingest] Generating embeddings for {len(contents)} structured chunks...")
+        embeddings = self.embedding_model.encode(contents, show_progress_bar=False)
+
+        # Store in NeonDB
+        import services.neon_vector_store as neon_store
+        neon_count = 0
+        try:
+            neon_count = neon_store.upsert_chunks(
+                restaurant_id=restaurant_id,
+                restaurant_name=restaurant_name,
+                chunks=contents,
+                embeddings=embeddings,
+                meta_tags=meta_tags,
+                pdf_filename="structured_json_ingest"
+            )
+            print(f"✅ [JSON Ingest] Stored {neon_count} perfectly-tagged chunks in NeonDB")
+        except Exception as e:
+            print(f"⚠️ [JSON Ingest] NeonDB sync failed: {e}")
+            return {"success": False, "error": str(e)}
+
+        # Also store in ChromaDB for local vector search
+        try:
+            self.restaurant_collection.delete(where={"restaurant_id": restaurant_id})
+            ids = [f"{restaurant_id}_chunk_{i}" for i in range(len(contents))]
+            self.restaurant_collection.upsert(
+                ids=ids,
+                documents=contents,
+                embeddings=[e.tolist() for e in embeddings],
+                metadatas=[{"restaurant_id": restaurant_id, "restaurant_name": restaurant_name, "tag": meta_tags[i]} for i in range(len(contents))]
+            )
+            print(f"✅ [JSON Ingest] Also stored {len(contents)} chunks in ChromaDB")
+        except Exception as e:
+            print(f"⚠️ [JSON Ingest] ChromaDB sync failed (non-critical): {e}")
+
+        return {
+            "success": True,
+            "restaurant_id": restaurant_id,
+            "chunks_created": len(chunks),
+            "neon_synced": neon_count > 0,
+            "chunk_summary": {tag: sum(1 for t in meta_tags if t == tag) for tag in set(meta_tags)}
+        }
+
+
     def _store_restaurant_index_metadata(self, restaurant_index: Dict):
         """Store restaurant index metadata in vector DB"""
         try:

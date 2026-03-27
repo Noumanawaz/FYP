@@ -320,7 +320,7 @@ export function buildPDFBlob(data: RestaurantExportData): Blob {
 
     const renderItems = (items: MenuItemData[]) => {
       items.forEach(item => {
-        const price = `${item.currency || 'PKR'} ${typeof item.base_price === 'number' ? item.base_price.toFixed(0) : item.base_price}`;
+        const price = `PKR ${typeof item.base_price === 'number' ? item.base_price.toFixed(0) : item.base_price}`;
         addLine(`  ${item.name} — ${price}${item.is_featured ? ' ★' : ''}`, 10, true);
         if (item.description) addLine(`    ${item.description}`, 9);
         const tags: string[] = [];

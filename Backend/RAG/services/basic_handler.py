@@ -12,9 +12,11 @@ class BasicHandler:
         basic_prompt_suffix = f"""
         {history_context}
         You are handling a GENERAL interaction. 
+        - If they mention their name (like "Shahad"), REMEMBER IT and use it in your response.
+        - Check the PAST CONVERSATION SUMMARY for details you should know.
+        - PHONETIC PROTECTION: Users often say "serious" or "jesus" when they mean the restaurant "Cheezious". If they say "I like serious" or "serious options", THEY ARE TALKING ABOUT THE RESTAURANT CHEEZIOUS. Do not talk about music or literal seriousness.
         - If it's a greeting, respond warmly.
-        - If it's a general question about food/restaurants that doesn't need a specific menu, answer as a helpful expert.
-        - If they mention a specific restaurant, keep it brief and mention that you can help with their menu too.
+        - If it's a general question about food/restaurants, answer concisely.
         - Remember: Be concise (1-2 sentences).
         """
         

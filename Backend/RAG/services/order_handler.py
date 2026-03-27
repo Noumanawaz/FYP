@@ -90,41 +90,93 @@ class OrderHandler:
         ctx = self.order_context[session_id]
         
         # 1. Advanced Context Detection
+        query_lower = query.lower()
+        
+        # Detect from live query first (highest priority)
         detected_res = self.rag_system.detect_restaurants_in_query(query)
-        if not detected_res and summary:
+        
+        # Check if user is explicitly switching restaurant 
+        is_switch = any(phrase in query_lower for phrase in [
+            'koi aur', 'kuchh aur', 'kisi aur', 'dusre', 'dusre restaurant', 'doosra',
+            'other', 'another', 'different', 'change', 'chijen', 'cheez', 'cheezious'
+        ])
+        
+        # If no restaurant in live query, look in recent history first (then summary)
+        if not detected_res and history:
+            # Scan history from most recent to find last explicit restaurant switch
+            for msg in reversed(history[-6:]):
+                if msg.get('role') == 'user':
+                    hist_res = self.rag_system.detect_restaurants_in_query(msg['content'])
+                    if hist_res and hist_res[0].get('detection_type') in ['explicit', 'explicit_and_category']:
+                        detected_res = hist_res
+                        print(f"📜 [OrderHandler] Using restaurant from recent history: {hist_res[0]['name']}")
+                        break
+        
+        # Fallback to summary only if no history hit
+        if not detected_res and summary and not is_switch:
             detected_res = self.rag_system.detect_restaurants_in_query(summary)
+            if detected_res:
+                print(f"📋 [OrderHandler] Using restaurant from summary: {detected_res[0]['name']}")
             
         if detected_res:
             new_rid = detected_res[0]["id"]
-            if not ctx["restaurant_id"] or not ctx["items"]:
+            new_name = detected_res[0]["name"]
+            if not ctx["restaurant_id"]:
+                # No restaurant yet, just set it
                 ctx["restaurant_id"] = new_rid
-                ctx["restaurant_name"] = detected_res[0]["name"]
+                ctx["restaurant_name"] = new_name
+            elif ctx["restaurant_id"] != new_rid:
+                # User is switching restaurants!
+                # Only switch if the query explicitly names a new restaurant (explicit detection)
+                if detected_res[0].get("detection_type") in ["explicit", "explicit_and_category"]:
+                    if ctx["items"]:
+                        print(f"🔄 Restaurant switch: {ctx['restaurant_name']} -> {new_name}. Clearing cart.")
+                        ctx["items"] = []  # Clear the old cart
+                    ctx["restaurant_id"] = new_rid
+                    ctx["restaurant_name"] = new_name
 
         target_ids = [ctx["restaurant_id"]] if ctx["restaurant_id"] else None
         rag_info = await asyncio.to_thread(self.rag_system.search_comprehensive_info, query, target_ids)
         menu_context = self.rag_system.build_comprehensive_context(rag_info)
         
-        # 2. Extract Intent
-        extraction_prompt = f"""
-        Analyze logic for {ctx['restaurant_name']}.
-        CART: {json.dumps(ctx['items'])}
+        # 2. Extract Intent with History Memory
+        history_msgs = ""
+        if history:
+            history_msgs = "\n".join([f"{m['role']}: {m['content']}" for m in history[-5:]])
+
+        extraction_prompt = f"""You are an order extractor for {ctx['restaurant_name']}.
+        Extract the user's intent and order details.
+        
+        CURRENT RESTAURANT: {ctx['restaurant_name']}
+        CURRENT CART: {json.dumps(ctx['items'])}
+        
+        MENU CONTEXT FOR {ctx['restaurant_name']} (ONLY ADD ITEMS FROM HERE):
+        {menu_context}
+        
+        RECENT CONVERSATION HISTORY:
+        {history_msgs}
+        
         SUMMARY: {summary}
-        MENU CONTEXT: {menu_context}
-        QUERY: "{query}"
+        USER QUERY: "{query}"
         
-        JSON: {{"intent": str, "items": list, "phone": str, "address": str, "suggestion": str, "error": str}}
-        Intents: ["add_item", "remove_item", "view_cart", "confirm_order", "set_info", "question"]
+        JSON FORMAT: {{"intent": str, "items": list, "remove_items": list, "phone": str, "address": str, "suggestion": str, "error": str}}
+        Intents: ["add_item", "remove_item", "update_item", "view_cart", "clear_cart", "confirm_order", "set_info", "question"]
         
-        RULES:
-        1. Match items against the MENU CONTEXT to find the correct "name", "price", and "item_id".
-        2. If names are in Roman Urdu, match them to the closest menu item in the "MENU CONTEXT".
-        3. "items" should be a list of objects: {{"name": str, "quantity": int, "item_id": str, "price": float}}
-        4. Even if an item is not explicitly in "MENU CONTEXT" but the user wants to order it based on previous conversation, add it with price if known.
-        5. If query is vague like "yes do it" or "confirm kar do" and summary/cart suggests they want to finish, use "confirm_order".
-        6. Use "question" if it's just a general inquiry.
+        STRICT RULES:
+        1. "add_item": ONLY extract items that appear in MENU CONTEXT above with a valid Item ID (UUID). Each item must have: name, quantity, price, item_id.
+        2. CRITICAL: If an item is in the HISTORY or SUMMARY but NOT in MENU CONTEXT with a UUID, DO NOT add it. Return intent="question" with error="Item not found in menu".
+        3. "remove_item": Provide a list of item names or 'item_id' to remove.
+        4. "confirm_order": User wants to finalize/confirm their current cart.
+        5. HISTORY RESOLUTION: If user says "yes", "han", "kar do" and history shows a suggestion, find that item in MENU CONTEXT. If found with a UUID → add_item. If not found → question with error.
+        6. NEVER add items based only on history or summary — they MUST be in MENU CONTEXT also.
         """
         
-        extraction_raw = await self.llm_service._call_openai_async([{"role": "user", "content": extraction_prompt}], response_format={"type": "json_object"})
+        messages = [
+            {"role": "system", "content": "You are a specialized order extractor."},
+            {"role": "user", "content": extraction_prompt}
+        ]
+        
+        extraction_raw = await self.llm_service._call_openai_async(messages, response_format={"type": "json_object"})
         extraction = json.loads(extraction_raw) if extraction_raw else {}
         intent = extraction.get("intent", "question")
         
@@ -134,13 +186,12 @@ class OrderHandler:
         res_en = ""
         res_type = "order_action"
 
-        # 3. Process Intent
+        # 3. Process Intents
         if intent == "add_item":
             new_items = extraction.get("items", [])
             safe_added = []
             for item in new_items:
                 if isinstance(item, dict):
-                    # STRICT VERSION: Only items found in the database (with valid UUID item_id) can be added.
                     item_id = item.get("item_id")
                     if item_id and len(item_id) >= 32:
                         safe_added.append({
@@ -149,17 +200,52 @@ class OrderHandler:
                             "price": float(item.get("price", 0)),
                             "item_id": item_id
                         })
-            
             if safe_added:
                 ctx["items"].extend(safe_added)
-                res_en = f"Okay, I've added {', '.join([i['name'] for i in safe_added])} to your {ctx['restaurant_name']} cart. Should I confirm?"
+                res_en = f"I've added {', '.join([i['name'] for i in safe_added])} to your {ctx['restaurant_name']} cart. Anything else, or should I confirm?"
             else:
-                res_en = f"I'm sorry, I couldn't find those specific items in the {ctx['restaurant_name']} menu. Would you like to hear the options?"
+                res_en = f"I couldn't find those specific items in the {ctx['restaurant_name']} menu. Would you like to try the options?"
                 res_type = "error"
         
+        elif intent == "remove_item":
+            to_remove = extraction.get("remove_items", [])
+            new_cart = []
+            removed = []
+            for item in ctx["items"]:
+                rem = False
+                for r in to_remove:
+                    if isinstance(r, str) and (r.lower() in item["name"].lower() or r == item.get("item_id")):
+                        rem = True
+                        break
+                if not rem: new_cart.append(item)
+                else: removed.append(item["name"])
+            
+            ctx["items"] = new_cart
+            if removed: res_en = f"Removed {', '.join(removed)} from your cart. Current cart: {self._cart_to_string(ctx['items'])}."
+            else: res_en = f"I couldn't find those to remove. Cart has: {self._cart_to_string(ctx['items'])}."
+
+        elif intent == "update_item":
+            updates = extraction.get("items", [])
+            upd = False
+            for u in updates:
+                for item in ctx["items"]:
+                    if item.get("item_id") == u.get("item_id") or u.get("name", "").lower() in item["name"].lower():
+                        item["quantity"] = int(u.get("quantity", item["quantity"]))
+                        upd = True
+            if upd: res_en = f"Updated your cart. Now: {self._cart_to_string(ctx['items'])}."
+            else: res_en = "I couldn't find that item in your cart."
+
+        elif intent == "clear_cart":
+            ctx["items"] = []
+            res_en = f"I've cleared your {ctx['restaurant_name']} cart."
+
+        elif intent == "view_cart":
+            if not ctx["items"]: res_en = "Your cart is currently empty."
+            else: res_en = f"In your {ctx['restaurant_name']} cart: {self._cart_to_string(ctx['items'])}. Shall I confirm?"
+
         elif intent == "confirm_order":
             if not ctx["items"]:
-                res_en = "Your cart is empty."
+                res_en = f"Your cart is empty. What would you like to add from {ctx['restaurant_name']}?"
             elif not ctx["phone"] or not ctx["address"]:
                 res_en = "I need your phone and delivery address to complete the order."
             else:
@@ -175,10 +261,6 @@ class OrderHandler:
                     else:
                         res_en = "Database error while placing your order. Please try again."
 
-        elif intent == "view_cart":
-            if not ctx["items"]: res_en = "Cart is empty."
-            else: res_en = f"In your {ctx['restaurant_name']} cart: " + ", ".join([f"{i['quantity']}x {i['name']}" for i in ctx["items"]])
-        
         else:
             # Fallback for questions or general chat
             dual = await self.llm_service.generate_dual_response(
@@ -206,7 +288,7 @@ class OrderHandler:
 
     async def _save_order_to_db(self, ctx: dict, session_id: str) -> bool:
         try:
-            conn = _get_conn()
+            conn = neon_vector_store._get_conn()
             with conn:
                 with conn.cursor() as cur:
                     user_id = session_id if len(session_id) >= 32 else None
@@ -225,22 +307,23 @@ class OrderHandler:
                     for it in ctx["items"]:
                         filtered_items.append({"name": it["name"], "quantity": it["quantity"], "price": it["price"]})
 
-                    cur.execute("""
-                        INSERT INTO orders (order_id, user_id, restaurant_id, location_id, order_type, order_status, items, subtotal, tax_amount, delivery_fee, total_amount, delivery_address, phone, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, 'voice', 'pending', %s, %s, %s, 100, %s, %s, %s, NOW(), NOW())
-                    """, (order_id, user_id, ctx["restaurant_id"], loc_id, json.dumps(filtered_items), subtotal, subtotal*0.15, total_amt, ctx["address"], ctx["phone"]))
-                    
+                    cur.execute(
+                        "INSERT INTO orders (order_id, user_id, restaurant_id, items, total_amount, status, created_at, phone, delivery_address, location_id) VALUES (%s, %s, %s, %s, %s, 'pending', NOW(), %s, %s, %s)",
+                        (order_id, user_id, ctx["restaurant_id"], json.dumps(filtered_items), total_amt, ctx["phone"], ctx["address"], loc_id)
+                    )
+
                     for item in ctx["items"]:
                         item_id = item.get("item_id")
                         if item_id and len(item_id) >= 32:
-                            try:
-                                uuid.UUID(item_id)
-                                cur.execute("INSERT INTO order_items (order_item_id, order_id, menu_item_id, quantity, unit_price, subtotal) VALUES (%s, %s, %s, %s, %s, %s)",
-                                    (str(uuid.uuid4()), order_id, item_id, item["quantity"], item["price"], item["price"]*item["quantity"]))
-                            except: pass
-            conn.close()
-            print(f"✅ DB ORDER SAVED: {order_id}")
-            return True
+                            cur.execute(
+                                "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (%s, %s, %s, %s)",
+                                (order_id, item_id, item["quantity"], item["price"])
+                            )
+                    return True
         except Exception as e:
-            print(f"❌ DB ERROR: {e}")
+            print(f"❌ DB Error: {e}")
             return False
+
+    def _cart_to_string(self, items: List[dict]) -> str:
+        if not items: return "nothing"
+        return ", ".join([f"{i['quantity']}x {i['name']}" for i in items])

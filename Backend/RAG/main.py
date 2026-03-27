@@ -190,6 +190,56 @@ async def ingest_restaurant(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/ingest-restaurant-json")
+async def ingest_restaurant_json(payload: dict):
+    """
+    Ingest restaurant data from structured JSON — no PDF required.
+    Produces perfectly tagged [SECTION: MENU ITEMS], [SECTION: RESTAURANT IDENTITY]
+    chunks that the bot can use precisely and consistently.
+    """
+    if not db_builder:
+        raise HTTPException(status_code=503, detail="DB Builder not initialized")
+
+    restaurant_id = payload.get("restaurant_id")
+    restaurant_name = payload.get("restaurant_name")
+    data = payload.get("data", {})
+
+    if not restaurant_id or not restaurant_name:
+        raise HTTPException(status_code=400, detail="restaurant_id and restaurant_name are required")
+
+    try:
+        print(f"📥 JSON ingest request for {restaurant_name} ({restaurant_id})")
+        result = await asyncio.to_thread(
+            db_builder.ingest_from_json,
+            data,
+            restaurant_id,
+            restaurant_name
+        )
+
+        if result.get("success"):
+            # Refresh the RAG system's restaurant index so new aliases work immediately
+            if rag_system:
+                await asyncio.to_thread(rag_system.load_restaurant_index)
+
+            return {
+                "success": True,
+                "message": f"Successfully ingested {restaurant_name} with {result['chunks_created']} structured chunks",
+                "chunks_created": result["chunks_created"],
+                "chunk_summary": result.get("chunk_summary", {}),
+                "neon_synced": result.get("neon_synced", False)
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ JSON Ingestion Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws/voice")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)

@@ -105,8 +105,6 @@ class OpenAILLMService:
         except Exception as e:
             print(f"❌ Network error calling OpenAI: {e}")
             
-        return ""
-    
     async def generate_dual_response(self, user_message: str, context: str = "", conversation_history: list = None) -> Dict[str, str]:
         """
         Generate both English and Urdu responses in a single OpenAI call to minimize latency.
@@ -118,20 +116,20 @@ class OpenAILLMService:
 
         # Create the system prompt for dual-language JSON response
         system_prompt = self._create_system_prompt() + """
-CRITICAL: You MUST respond in JSON format with exactly two keys:
-1. "en": Your natural English response.
-2. "ur": Your natural Urdu translation (in Urdu script/Arabic characters).
+        CRITICAL: You MUST respond in JSON format with exactly two keys:
+        1. "en": Your natural English response.
+        2. "ur": Your natural Roman Urdu response (Urdu written in English/Latin letters).
 
-Example:
-{
-  "en": "Hello, how can I help you?",
-  "ur": "ہیلو، میں آپ کی کیا مدد کر سکتا ہوں؟"
-}
-"""
+        Example:
+        {
+          "en": "Hello, how can I help you?",
+          "ur": "Hello, main aapki kya madad kar sakta hoon?"
+        }
+        """
         
         # Build user message with context
         if context:
-            user_prompt = f"Customer asked: \"{user_message}\"\n\nContext/Menu info:\n{context}"
+            user_prompt = f"Customer asked: \"{user_message}\"\n\nContext:\n{context}"
         else:
             user_prompt = user_message
         
@@ -145,6 +143,7 @@ Example:
         try:
             raw_response = await self._call_openai_async(
                 messages, 
+                # Strict JSON enforcement for dual output
                 response_format={"type": "json_object"}
             )
             
@@ -174,13 +173,7 @@ Example:
         
         # Build user message with context
         if context:
-            user_lower = user_message.lower()
-            asking_about_prices = any(kw in user_lower for kw in ['price', 'prices', 'cost', 'how much', 'deal'])
-            
-            if asking_about_prices:
-                user_prompt = f"""Customer asked: "{user_message}"\n\nMenu information:\n{context}\n\nIMPORTANT: Customer is asking about prices. Include actual prices naturally. No markdown."""
-            else:
-                user_prompt = f"""Customer asked: "{user_message}"\n\nMenu information:\n{context}\n\nPlease answer naturally using this information."""
+            user_prompt = f"Customer asked: \"{user_message}\"\n\nContext:\n{context}"
         else:
             user_prompt = user_message
         
@@ -206,26 +199,41 @@ Example:
     def _create_system_prompt(self) -> str:
         """Create a natural, conversational system prompt for phone-call responses"""
         
-        base_prompt = """You are a professional restaurant voice assistant. 
+        system_prompt = """You are a friendly AI voice-ordering assistant for a multi-restaurant food platform.
+Your responses are warm, natural, and conversational (1-3 sentences max). You speak like a knowledgeable friend helping someone decide what to eat.
 
-Your goals:
-- Answer customer questions naturally and concisely.
-- For general questions, keep it to 1-2 sentences. 
-- If the customer asks for options, a menu, or a list, you can list the key items and their prices based on context.
-- Prioritize menu information from the provided context (RESTAURANT INFO).
-- If the customer provided their name or other info earlier in the session summary/history, remember and use it!
-- ALWAYS include prices from the menu naturally.
-- NO markdown formatting (no **bold**, no bullet points with - or *).
-- Use only the English alphabet for English responses.
+CONVERSATIONAL STYLE:
+- Speak naturally, like a phone assistant. No markdown, no bullet points.
+- Use the customer's name occasionally if they shared it.
+- When listing items, read them naturally: "From Ranchers, you have Malai Tikka for PKR 500 and Smoky BBQ Ranch Burger."
+- If the user mixes languages (Roman Urdu/English), respond in the same tone.
+- Be helpful and proactive — if items are limited, suggest what IS available and ask what they'd like.
 
-CRITICAL: 
-- You ARE a voice assistant that CAN take orders. If a user wants to order, guide them to confirmation.
-- Be extremely polite, professional, and helpful. 
-- Avoid mentioning you don't have personal info if the user literally JUST told you their name. Use the summary!
+=== STRICT MENU RULES (NEVER BREAK THESE) ===
+
+1. ORDERABLE ITEMS: ONLY items in [SECTION: MENU ITEMS] with a PKR price AND an Item ID can be offered for ordering.
+2. IDENTITY ITEMS: Items in [SECTION: RESTAURANT IDENTITY] under "Specialties" (e.g., Chicken Kiev, Loaded Burgers) are DESCRIPTIONS of the restaurant style — NOT orderable unless also in [SECTION: MENU ITEMS].
+3. If asked about an item that exists in IDENTITY but NOT in MENU ITEMS:
+   → Say naturally: "That's not on the current menu, but from [Restaurant] you can order [list MENU ITEMS]."
+   → Do NOT say "That's listed as a specialty" — that sounds robotic.
+4. If an item has PKR 0 or no price, say "the price isn't listed" — don't quote 0.
+5. NEVER invent or guess prices. Only quote what's in the context.
+6. If the menu context has no items at all, say: "I don't have the full menu right now, but I can check — what are you looking for?"
+
+=== MULTI-RESTAURANT RULES ===
+7. Only mention restaurants that appear in the provided context.
+8. When a user switches restaurants, acknowledge smoothly: "Sure, let me check Cheezious for you!"
+9. Track which restaurant the user is focused on from recent conversation — don't jump restaurant contexts randomly.
+10. If confused about which restaurant the user means, ask once: "Did you mean Ranchers or Cheezious?"
+11. 'koi aur', 'aur koi', 'Iske alava' = user wants to know about OTHER restaurants — list all available.
+
+=== SUMMARY & CONTEXT RULES ===
+12. The conversation SUMMARY tells you what was discussed before. Trust it but verify against the current MENU CONTEXT.
+13. If the summary mentions an item but it's not in the current MENU CONTEXT, do not confirm it — say it's not currently available.
+14. If the user says "wahi wala", "pehle wala", "us wali cheez" — refer to the most recent item discussed in history.
 """
+        return system_prompt
 
-        return base_prompt
-    
     async def generate_summary(self, existing_summary: str, new_messages: List[Dict]) -> str:
         """Generate a concise, factual summary of the conversation so far (Async)"""
         if not self.api_configured:
@@ -233,15 +241,25 @@ CRITICAL:
 
         messages_text = "\n".join([f"{m['role']}: {m['content']}" for m in new_messages])
         
-        prompt = f"""Existing Summary: "{existing_summary}"\n\nNew messages:\n{messages_text}\n\nUpdate the summary briefly (1-2 sentences) about the customer's needs. Return ONLY the new summary."""
+        prompt = f"""Existing Summary: "{existing_summary}"
+
+New messages:
+{messages_text}
+
+Update the summary in 1-2 sentences. Include:
+- Customer's name (if shared)
+- Which restaurant(s) the customer is currently interested in
+- Which items have been discussed or ordered
+- Whether the customer has switched restaurants
+Return ONLY the updated summary, no labels."""
 
         messages = [
-            {"role": "system", "content": "You are a factual summarization assistant. Update summaries concisely."},
+            {"role": "system", "content": "You are a factual summarization assistant. Track restaurant context carefully."},
             {"role": "user", "content": prompt}
         ]
         
         try:
-            response = await self._call_openai_async(messages, max_tokens=150)
+            response = await self._call_openai_async(messages, max_tokens=180)
             return response.strip()
         except Exception as e:
             print(f"⚠️ Summary failed: {e}")

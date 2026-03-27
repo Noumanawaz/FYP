@@ -77,13 +77,26 @@ class MultiRestaurantRAGSystem:
 
                 for rid, rname in db_restaurants:
                     name_clean = rname.strip()
+                    kws = [name_clean.lower(), rid.lower()]
+                    
+                    # Phonetic/STT error protection keywords
+                    name_lower = name_clean.lower()
+                    if "cheezious" in name_lower:
+                        kws += ["serious", "jesus", "sheesh", "cheesy", "choose", "cheezo", "cheez", "chijen", "chijon", "cheej", "cheese", "chijin"]
+                    if "ranchers" in name_lower:
+                        kws += ["rancho", "rancher", "ranchi", "ranches", "ranch", "rancherz"]
+                        # NOTE: 'branches' intentionally excluded - too broadly matches generic queries
+                    
+                    # Deduplicate
+                    kws = list(set(kws))
+                    
                     self.restaurant_index["restaurants"].append({
                         "id": rid,
                         "name": name_clean,
-                        "keywords": [name_clean.lower(), rid.lower()],
+                        "keywords": kws,
                         "dynamic": True
                     })
-                    print(f"✅ Synced {name_clean} from database to RAG index")
+                    print(f"✅ Synced {name_clean} (with {len(kws)} aliases) from database to RAG index")
             except Exception as e:
                 print(f"❌ Failed to fetch restaurants from DB: {e}")
 
@@ -330,8 +343,8 @@ class MultiRestaurantRAGSystem:
             # Sort by final score
             reranked_chunks.sort(key=lambda x: x['final_score'], reverse=True)
             
-            # Return top_k, but limit to 5 max for phone-call style (concise responses)
-            final_chunks = reranked_chunks[:min(top_k, 5)]
+            # Respect top_k — for menu/order queries this allows all items to come through
+            final_chunks = reranked_chunks[:top_k]
             print(f"✅ Returning {len(final_chunks)} top-ranked chunks")
             for i, chunk in enumerate(final_chunks[:3]):  # Log top 3
                 print(f"  {i+1}. {chunk['restaurant_name']} (score: {chunk['final_score']:.3f}, similarity: {chunk['similarity']:.3f}, rerank: {chunk['rerank_score']:.3f})")
@@ -353,7 +366,7 @@ class MultiRestaurantRAGSystem:
             # Return empty list on error, system will fall back gracefully
             return []
     
-    def search_comprehensive_info(self, query: str, restaurant_ids: List[str] = None) -> Dict:
+    def search_comprehensive_info(self, query: str, restaurant_ids: List[str] = None, top_k: int = 20) -> Dict:
         """
         Search for comprehensive information across multiple restaurants
         Uses vector DB if available, falls back to JSON
@@ -371,7 +384,7 @@ class MultiRestaurantRAGSystem:
         if self.use_vector_db:
             # Use production-grade hybrid search with error handling
             try:
-                retrieved_chunks = self.search_vector_db(query, restaurant_ids, top_k=20)
+                retrieved_chunks = self.search_vector_db(query, restaurant_ids, top_k=top_k)
             except Exception as e:
                 print(f"❌ Error in comprehensive search: {e}")
                 retrieved_chunks = []
@@ -393,7 +406,11 @@ class MultiRestaurantRAGSystem:
                 )
                 
                 # Determine if we should get ALL chunks (broad query)
-                is_broad_query = any(kw in query.lower() for kw in ['menu', 'options', 'list', 'all', 'what do you have', 'items'])
+                is_broad_query = any(kw in query.lower() for kw in [
+                    'menu', 'options', 'list', 'all', 'what do you have', 'items',
+                    'order', 'add', 'kar do', 'karo', 'chahta', 'chahiye', 'batao',
+                    'kya hai', 'option', 'available', 'milta', 'milega'
+                ])
                 
                 chunks = []
                 if is_broad_query:
@@ -463,18 +480,28 @@ class MultiRestaurantRAGSystem:
         
         # If user asked about a specific restaurant, only include that one
         restaurants_to_include = search_results["results"]
-        if focus_restaurant:
-            # Filter to only the focused restaurant
-            restaurants_to_include = {
-                rid: info for rid, info in search_results["results"].items()
-                if rid.lower() == focus_restaurant.lower() or info["name"].lower() == focus_restaurant.lower()
-            }
-            # If we found the focused restaurant, use only that
-            if restaurants_to_include:
-                print(f"🎯 Focusing on {focus_restaurant} - excluding other restaurants")
+        # Resolve focus_restaurant: only exclude others if focus is VERY dominant
+        restaurants_to_include = search_results["results"]
+        if focus_restaurant and len(search_results["results"]) > 1:
+            # If focusing, check if the other restaurants might be relevant
+            # If the query type is 'menu' or 'general', we should probably keep them
+            is_broad = any(kw in query for kw in ['menu', 'options', 'other', 'anything else', 'else'])
+            
+            if is_broad:
+                print(f"🔄 Broad query detected, keeping all restaurants even with focus on {focus_restaurant}")
             else:
-                print(f"⚠️  Focus restaurant {focus_restaurant} not found in results, using all restaurants")
-                restaurants_to_include = search_results["results"]
+                filtered = {
+                    rid: info for rid, info in search_results["results"].items()
+                    if rid.lower() == focus_restaurant.lower() or info["name"].lower() == focus_restaurant.lower()
+                }
+                if filtered:
+                    # Only focus if we have a very clear reason to exclude others
+                    # For now, let's be inclusive if multiple detections exist
+                    if len(search_results["results"]) <= 2:
+                        print(f"🎯 Focusing on {focus_restaurant}")
+                        restaurants_to_include = filtered
+                    else:
+                        print(f"ℹ️ Multiple candidates, keeping context broad")
         
         for restaurant_id, restaurant_info in restaurants_to_include.items():
             restaurant_name = restaurant_info["name"]
@@ -498,9 +525,9 @@ class MultiRestaurantRAGSystem:
                     selected_chunks = []
                     seen_content_prefixes = set()
                     
-                    # For broad queries, we include more context
-                    is_broad_query = any(kw in query for kw in ['menu', 'options', 'list', 'all', 'what do you have'])
-                    max_chunks = 15 if is_broad_query else 5
+                    # For broad queries or order-related extraction, we include more context to avoid missing items
+                    is_broad_query = any(kw in query for kw in ['menu', 'options', 'list', 'all', 'what do you have', 'order', 'add', 'tikka', 'burger', 'pizza'])
+                    max_chunks = 15 if is_broad_query else 8
                     
                     for chunk in scored_chunks:
                         content_sig = chunk["content"][:100].lower()
@@ -512,11 +539,24 @@ class MultiRestaurantRAGSystem:
                     
                     if selected_chunks:
                         print(f"📝 Building context for {restaurant_name}: {len(selected_chunks)} chunks")
-                        # Use full chunk content (not filtered) for better context
-                        # Clean up the context to help with price extraction
-                        relevant_text = "\n\n---\n\n".join([chunk["content"] for chunk in selected_chunks])
-                        # Fix common price formatting issues (Rs. , 249 -> Rs. 1,249)
-                        # This helps the LLM extract prices better
+                        chunk_texts = []
+                        
+                        # Sort: MENU ITEMS first so LLM sees orderable items before identity/location
+                        menu_chunks = [c for c in selected_chunks if 'menu items' in c.get('meta_tag', '').lower()]
+                        other_chunks = [c for c in selected_chunks if 'menu items' not in c.get('meta_tag', '').lower()]
+                        ordered_chunks = menu_chunks + other_chunks
+                        
+                        for chunk in ordered_chunks:
+                            content = chunk['content']
+                            # The new structured chunks already start with [SECTION: ...].
+                            # For legacy chunks (old PDF format) that don't, add the tag.
+                            if not content.strip().startswith('[SECTION:'):
+                                section_tag = f"[SECTION: {chunk.get('meta_tag', 'GENERAL').upper()}]"
+                                content = f"{section_tag}\n{content}"
+                            chunk_texts.append(content)
+                        
+                        relevant_text = "\n\n---\n\n".join(chunk_texts)
+                        # Fix common price formatting issues
                         relevant_text = re.sub(r'Rs\.\s*,\s*(\d+)', r'Rs. \1', relevant_text)
                         
                         if relevant_text:
@@ -566,7 +606,8 @@ class MultiRestaurantRAGSystem:
                     "item": {
                         "name": item_name,
                         "price": price,
-                        "description": content
+                        "description": content,
+                        "item_id": chunk.get("id") # Include the actual database ID
                     },
                     "relevance": chunk["similarity"]
                 })
@@ -578,12 +619,25 @@ class MultiRestaurantRAGSystem:
         Main method to process multi-restaurant queries
         """
         # Detect restaurants mentioned in the query
+        query_lower = query.lower()
         detected_restaurants = self.detect_restaurants_in_query(query)
         
         # If no restaurants detected in query, check summary
-        if not detected_restaurants and summary:
+        # UNLESS the user is asking to switch or find something 'else'
+        # Also handle Roman Urdu switch phrases
+        is_switch = (
+            any(kw in query_lower for kw in ['other', 'another', 'else', 'different', 'change'])
+            or any(phrase in query_lower for phrase in [
+                'koi aur', 'kuchh aur', 'kisi aur', 'kisi dusre', 'dusre restaurant',
+                'aur restaurant', 'alag', 'doosra', 'doosre'
+            ])
+        )
+        
+        if not detected_restaurants and summary and not is_switch:
             print(f"🔍 No restaurant in query, checking summary: '{summary[:50]}...'")
             detected_restaurants = self.detect_restaurants_in_query(summary)
+        elif is_switch:
+            print(f"🔄 Switch intent detected ('else/other'), ignoring summary for fresh detection.")
             
         # If still no restaurants detected, search all restaurants
         if not detected_restaurants:
@@ -592,8 +646,13 @@ class MultiRestaurantRAGSystem:
         else:
             restaurant_ids = [r["id"] for r in detected_restaurants]
         
-        # Search comprehensive information
-        search_results = self.search_comprehensive_info(query, restaurant_ids)
+        # Increase search depth for better item retrieval (especially for ordering)
+        # We use a larger top_k and broader context for more accurate results
+        is_order = any(kw in query_lower for kw in ['order', 'add', 'item', 'price', 'menu'])
+        top_k = 25 if is_order else 15
+        
+        # Search comprehensive information with increased depth if needed
+        search_results = self.search_comprehensive_info(query, restaurant_ids, top_k=top_k)
         
         # Determine if user asked about a specific restaurant explicitly
         # Prioritize explicit mentions over category-based detections
@@ -603,14 +662,16 @@ class MultiRestaurantRAGSystem:
             if r.get("detection_type") in ["explicit", "explicit_and_category"]
         ]
         
-        if explicit_restaurants:
-            # User explicitly mentioned a restaurant - focus only on that
+        if explicit_restaurants and len(explicit_restaurants) == 1:
+            # ONLY focus if there is exactly ONE explicit restaurant mentioned
             focus_restaurant = explicit_restaurants[0]["name"]
-            print(f"🎯 User explicitly asked about {focus_restaurant} - focusing only on this restaurant")
+            print(f"🎯 Single explicit focus: {focus_restaurant}")
         elif len(detected_restaurants) == 1:
-            # Only one restaurant detected (even if by category)
             focus_restaurant = detected_restaurants[0]["name"]
-            print(f"🎯 Single restaurant detected: {focus_restaurant}")
+            print(f"🎯 Single candidate focus: {focus_restaurant}")
+        else:
+            print(f"ℹ️ Broad context: {[r['name'] for r in detected_restaurants]}")
+            focus_restaurant = None
         
         # Build context (only focused restaurant if specified)
         context = self.build_comprehensive_context(search_results, focus_restaurant=focus_restaurant)

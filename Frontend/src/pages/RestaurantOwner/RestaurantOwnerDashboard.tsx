@@ -12,7 +12,7 @@ import MenuPreview from './components/MenuPreview';
 import RestaurantSetupWizard from './components/RestaurantSetupWizard';
 import OrdersTab from './components/OrdersTab';
 import RestaurantOwnerHeader from './components/RestaurantOwnerHeader';
-import { buildPDFBlob } from '../../utils/restaurantExportUtils';
+
 
 const RAG_BASE_URL = (import.meta as any).env?.VITE_RAG_URL ?? 'http://localhost:8000';
 
@@ -131,22 +131,21 @@ const RestaurantOwnerDashboard: React.FC = () => {
         menuItems,
       };
 
-      const pdfBlob = buildPDFBlob(exportData);
-      const pdfFile = new File(
-        [pdfBlob],
-        `${restaurant.name.toLowerCase().replace(/\s+/g, '-')}-restaurant.pdf`,
-        { type: 'application/pdf' }
-      );
-      const form = new FormData();
-      form.append('file', pdfFile);
-      form.append('restaurant_id', restaurant.restaurant_id);
-      form.append('restaurant_name', restaurant.name);
+      // Build the structured JSON payload — no PDF needed anymore
+      const jsonPayload = {
+        restaurant_id: restaurant.restaurant_id,
+        restaurant_name: restaurant.name,
+        data: exportData,
+      };
 
-      const res = await fetch(`${RAG_BASE_URL}/ingest-restaurant`, {
+      const res = await fetch(`${RAG_BASE_URL}/ingest-restaurant-json`, {
         method: 'POST',
-        body: form,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonPayload),
       });
       if (res.ok) {
+        const result = await res.json();
+        console.log('[SaveToAI] Ingested chunks:', result.chunk_summary);
         setAiStatus('success');
       } else {
         setAiStatus('error');

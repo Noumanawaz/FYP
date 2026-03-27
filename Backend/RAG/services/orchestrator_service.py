@@ -85,16 +85,21 @@ class OrchestratorService:
         {last_msgs}
         
         Classify the user query into exactly one of these:
-        1. GREETING: Simple hellos, goodbyes.
-        2. GENERAL: Non-restaurant questions.
+        1. GREETING: Simple hellos, goodbyes, well-being updates.
+        2. GENERAL: Non-restaurant, non-food questions only.
         3. ORDER: Intent to place an order, add items, remove items, view cart, or CONFIRM an order (even if it's a short "yes", "ok", or "confirm").
-        4. COMPLEX: Menu/restaurant-specific questions.
+        4. COMPLEX: Menu/restaurant-specific questions, browsing options, asking about a different restaurant.
         
         NEW QUERY: "{query}"
         
         RULES:
-        - If query is "yes", "confirm", "ok", and last messages show an order-related question, classify as ORDER.
-        - If query mentions food items for ordering, classify as ORDER.
+        - If query is "yes", "confirm", "ok", or "done" and history shows an order context, use ORDER.
+        - Users often mispronounce "Cheezious" as "serious", "jesus", "sheesh", or "chijen". Treat those as restaurant mentions → COMPLEX.
+        - If query mentions food items or brand names for ordering, use ORDER.
+        - If query asks about a restaurant menu, options, or details, use COMPLEX.
+        - CRITICAL: If user says "koi aur restaurant", "aur restaurant hai", "kisi aur restaurant", "another restaurant", "different restaurant" → use COMPLEX (they want to explore other options!).
+        - "koi aur option", "kuchh aur", "something else" about food → COMPLEX.
+        - Only use GREETING for pure greetings with NO food/restaurant mention.
         
         Return ONLY the category name."""
 
