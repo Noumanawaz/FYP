@@ -286,42 +286,96 @@ class OrderHandler:
             "confidence": 1.0, "suggestions": ["Check my cart", "Confirm order"]
         }
 
-    async def _save_order_to_db(self, ctx: dict, session_id: str) -> bool:
+    async def _save_order_to_db(self, ctx: dict, session_id: str, voice_transcript: str = "") -> bool:
         try:
-            conn = neon_vector_store._get_conn()
+            conn = _get_conn()   # ← was incorrectly neon_vector_store._get_conn()
             with conn:
                 with conn.cursor() as cur:
                     user_id = session_id if len(session_id) >= 32 else None
                     subtotal = sum(float(i.get('price', 0)) * int(i.get('quantity', 1)) for i in ctx["items"])
-                    total_amt = subtotal * 1.15 + 100
+                    tax_amount = round(subtotal * 0.15, 2)
+                    delivery_fee = 100.0
+                    total_amount = round(subtotal + tax_amount + delivery_fee, 2)
                     order_id = str(uuid.uuid4())
-                    
+
+                    # Find best location_id
                     loc_id = ctx.get("location_id")
                     if not loc_id:
-                        cur.execute("SELECT location_id FROM restaurant_locations WHERE restaurant_id = %s LIMIT 1", (ctx["restaurant_id"],))
+                        cur.execute(
+                            "SELECT location_id FROM restaurant_locations WHERE restaurant_id = %s AND status = 'open' LIMIT 1",
+                            (ctx["restaurant_id"],)
+                        )
                         row = cur.fetchone()
+                        if not row:
+                            # Try without status filter (maybe status column differs)
+                            cur.execute(
+                                "SELECT location_id FROM restaurant_locations WHERE restaurant_id = %s LIMIT 1",
+                                (ctx["restaurant_id"],)
+                            )
+                            row = cur.fetchone()
                         loc_id = row[0] if row else None
-                    if not loc_id: return False
+                    if not loc_id:
+                        print(f"❌ No location found for restaurant {ctx['restaurant_id']}")
+                        return False
 
-                    filtered_items = []
-                    for it in ctx["items"]:
-                        filtered_items.append({"name": it["name"], "quantity": it["quantity"], "price": it["price"]})
+                    # Build items JSON for the orders.items column
+                    items_json = json.dumps([{
+                        "item_id": i.get("item_id"),
+                        "name": i["name"],
+                        "quantity": i["quantity"],
+                        "unit_price": i.get("price", 0),
+                        "subtotal": float(i.get("price", 0)) * int(i.get("quantity", 1))
+                    } for i in ctx["items"]])
 
-                    cur.execute(
-                        "INSERT INTO orders (order_id, user_id, restaurant_id, items, total_amount, status, created_at, phone, delivery_address, location_id) VALUES (%s, %s, %s, %s, %s, 'pending', NOW(), %s, %s, %s)",
-                        (order_id, user_id, ctx["restaurant_id"], json.dumps(filtered_items), total_amt, ctx["phone"], ctx["address"], loc_id)
-                    )
+                    cur.execute("""
+                        INSERT INTO orders (
+                            order_id, user_id, restaurant_id, location_id,
+                            order_type, order_status, items,
+                            subtotal, tax_amount, delivery_fee, discount_amount,
+                            total_amount, currency,
+                            delivery_address, phone,
+                            special_instructions, voice_transcript,
+                            created_at, updated_at
+                        ) VALUES (
+                            %s, %s, %s, %s,
+                            'delivery', 'pending', %s,
+                            %s, %s, %s, 0,
+                            %s, 'PKR',
+                            %s, %s,
+                            NULL, %s,
+                            NOW(), NOW()
+                        )
+                    """, (
+                        order_id, user_id, ctx["restaurant_id"], loc_id,
+                        items_json,
+                        subtotal, tax_amount, delivery_fee,
+                        total_amount,
+                        ctx.get("address"), ctx.get("phone"),
+                        voice_transcript or ""
+                    ))
 
+                    # Insert individual order_items rows
                     for item in ctx["items"]:
                         item_id = item.get("item_id")
                         if item_id and len(item_id) >= 32:
-                            cur.execute(
-                                "INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (%s, %s, %s, %s)",
-                                (order_id, item_id, item["quantity"], item["price"])
-                            )
+                            order_item_id = str(uuid.uuid4())
+                            unit_price = float(item.get("price", 0))
+                            qty = int(item.get("quantity", 1))
+                            cur.execute("""
+                                INSERT INTO order_items (
+                                    order_item_id, order_id, menu_item_id,
+                                    quantity, unit_price, subtotal,
+                                    variants_selected, special_instructions,
+                                    created_at, updated_at
+                                ) VALUES (%s, %s, %s, %s, %s, %s, '{}', NULL, NOW(), NOW())
+                            """, (order_item_id, order_id, item_id, qty, unit_price, unit_price * qty))
+
+                    print(f"✅ Order {order_id} saved — user={user_id} restaurant={ctx['restaurant_name']} total=PKR{total_amount}")
+                    ctx["last_order_id"] = order_id
                     return True
         except Exception as e:
-            print(f"❌ DB Error: {e}")
+            print(f"❌ DB Error saving order: {e}")
+            import traceback; traceback.print_exc()
             return False
 
     def _cart_to_string(self, items: List[dict]) -> str:

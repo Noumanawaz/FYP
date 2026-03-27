@@ -5,6 +5,7 @@ import ChatbotService, { ChatbotMessage, ChatbotResponse } from "../../services/
 import Button from "../Common/Button";
 import { speakWithUplift, stopUpliftTTS } from "../../services/ttsService";
 import { getEnvVar } from "../../utils/env";
+import { useApp } from "../../contexts/AppContext";
 
 interface VoiceChatbotModalProps {
   isOpen: boolean;
@@ -29,6 +30,20 @@ const getChatbotBaseUrl = (): string => {
 
 const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }) => {
   const { isListening, transcript, isSupported, error, startListening, stopListening, resetTranscript } = useSpeechRecognition();
+  const { state } = useApp();
+  const user = state.user;
+
+  // Use the logged-in user's UUID as session_id so orders are linked to their account
+  const sessionId = useRef<string>(user?.id || `session_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`);
+
+  // Update sessionId if user logs in mid-session
+  useEffect(() => {
+    if (user?.id) {
+      sessionId.current = user.id;
+      // Also update HTTP chatbot service so fallback path uses the right user
+      chatbotService.current.setSessionId(user.id);
+    }
+  }, [user?.id]);
 
   const [messages, setMessages] = useState<ChatbotMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -234,7 +249,7 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
 
     try {
       if (wsEnabled && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "chat", message: userMessage.message }));
+        wsRef.current.send(JSON.stringify({ type: "chat", message: userMessage.message, session_id: sessionId.current }));
       } else {
         const response = await chatbotService.current.sendMessage(userMessage.message);
         const displayText = response.response_en || response.response;

@@ -43,6 +43,10 @@ class ChatbotService {
     this.sessionId = `session_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
   }
 
+  setSessionId(id: string): void {
+    this.sessionId = id;
+  }
+
   async sendMessage(message: string): Promise<ChatbotResponse> {
     try {
       // Add user message to conversation history
