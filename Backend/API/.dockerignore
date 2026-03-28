@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.git
+.DS_Store
+Dockerfile
+logs
+database/migrations/run_password_migration.js

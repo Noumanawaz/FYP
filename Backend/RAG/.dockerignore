@@ -1,0 +1,12 @@
+venv
+__pycache__
+.env
+.git
+.DS_Store
+Dockerfile
+data
+vector_db/chroma.sqlite3
+# Don't ignore the whole vector_db if we want to include pre-built DB?
+# Usually, it's better to build it in-place or mount a volume.
+# I'll let it stay for now and the user can decide.
+# But for DigitalOcean, building is better.

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # Frontend Service (Port 80)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: vocabite-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend-api
+      - backend-rag
+    environment:
+      # These must be set during build stage for Vite to pick them up
+      # but they are passed to the frontend via the container if using a specific build script
+      # However, we rely on the .env being present in the build stage in Dockerfile
+      - NODE_ENV=production
+    networks:
+      - vocabite-network
+
+  # Backend API Service (Port 3000)
+  backend-api:
+    build:
+      context: ./Backend/API
+      dockerfile: Dockerfile
+    container_name: vocabite-api
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./Backend/API/.env
+    restart: always
+    networks:
+      - vocabite-network
+
+  # Backend RAG Service (Port 8000)
+  backend-rag:
+    build:
+      context: ./Backend/RAG
+      dockerfile: Dockerfile
+    container_name: vocabite-rag
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./Backend/RAG/.env
+    restart: always
+    networks:
+      - vocabite-network
+
+networks:
+  vocabite-network:
+    driver: bridge
