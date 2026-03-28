@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { CategoryController } from "@/controllers/category.controller";
-import { body, query, custom } from "express-validator";
+import { body, query } from "express-validator";
 import { validate } from "@/middleware/validation";
 import { authenticate, optionalAuth } from "@/middleware/auth";
 import { requireRestaurantOwnerOrAdmin } from "@/middleware/rbac";

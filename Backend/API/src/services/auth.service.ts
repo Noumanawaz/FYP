@@ -34,7 +34,7 @@ export class AuthService {
 
     const expiresIn = process.env.JWT_EXPIRES_IN || "7d";
 
-    return jwt.sign(payload, jwtSecret, { expiresIn });
+    return jwt.sign(payload, jwtSecret, { expiresIn: expiresIn as any });
   }
 
   /**
@@ -65,7 +65,7 @@ export class AuthService {
 
     const expiresIn = process.env.JWT_REFRESH_EXPIRES_IN || "30d";
 
-    return jwt.sign({ user_id: userId }, jwtRefreshSecret, { expiresIn });
+    return jwt.sign({ user_id: userId }, jwtRefreshSecret, { expiresIn: expiresIn as any });
   }
 
   /**
