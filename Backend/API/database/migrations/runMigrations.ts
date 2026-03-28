@@ -3,7 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 async function runMigrations() {
-  console.log('🚀 Starting Database Migrations...');
+  console.log('🚀 Starting Database Migrations (V2)...');
+  console.log('📍 Current directory:', process.cwd());
+  console.log('🔗 Migration path:', __dirname);
   
   const migrationFiles = [
     '001_initial_schema.sql',

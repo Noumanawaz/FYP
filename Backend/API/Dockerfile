@@ -38,5 +38,5 @@ COPY --from=build /app/src ./src
 # EXPOSE port
 EXPOSE 3000
 
-# Start command
-CMD ["sh", "-c", "npm run migrate && npm start"]
+# Start command - ensuring we attempt migrations but always proceed to start the app
+CMD ["sh", "-c", "echo '🚀 Starting deployment...' && npm run migrate || echo '⚠️ Migration skip/fail, starting app...' && npm start"]
