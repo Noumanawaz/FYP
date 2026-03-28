@@ -13,9 +13,9 @@ async function startServer() {
     // Initialize databases
     await initializeDatabases();
 
-    // Start Express server
-    app.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT}`);
+    // Start Express server - binding to 0.0.0.0 is crucial for Docker
+    app.listen(Number(PORT), "0.0.0.0", () => {
+      logger.info(`🚀 Server running on 0.0.0.0:${PORT}`);
       logger.info(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
       logger.info(`🏥 Health Check: http://localhost:${PORT}/api/health`);
     });
