@@ -31,7 +31,13 @@ class OrderHandler:
     async def _fetch_user_info(self, session_id: str) -> Dict[str, Any]:
         user_info = {"phone": None, "address": None, "lat": None, "lng": None}
         try:
-            if len(session_id) >= 32:
+            # Check if session_id is a proper UUID (36 chars with hyphens, or 32 hex chars)
+            import re
+            is_uuid = bool(re.match(
+                r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                session_id, re.IGNORECASE
+            ))
+            if is_uuid:
                 conn = _get_conn()
                 with conn:
                     with conn.cursor() as cur:
@@ -39,15 +45,20 @@ class OrderHandler:
                         row = cur.fetchone()
                         if row:
                             user_info["phone"] = row[0]
-                            if row[1] and isinstance(row[1], list) and len(row[1]) > 0:
-                                addr_obj = row[1][0]
+                            addresses = row[1]
+                            if addresses and isinstance(addresses, list) and len(addresses) > 0:
+                                addr_obj = addresses[0]
                                 if isinstance(addr_obj, dict):
-                                    user_info["address"] = addr_obj.get("address")
+                                    user_info["address"] = addr_obj.get("address") or addr_obj.get("full_address")
                                     user_info["lat"] = addr_obj.get("lat")
                                     user_info["lng"] = addr_obj.get("lng")
                                 else:
                                     user_info["address"] = str(addr_obj)
+                            if user_info["phone"] or user_info["address"]:
+                                print(f"✅ [OrderHandler] Pre-loaded user info — phone={'YES' if user_info['phone'] else 'NO'} address={'YES' if user_info['address'] else 'NO'}")
                 conn.close()
+            else:
+                print(f"ℹ️ [OrderHandler] session_id '{session_id[:15]}...' is not a UUID — skipping user DB lookup")
         except Exception as e:
             print(f"⚠️ Error fetching user info: {e}")
         return user_info
@@ -338,7 +349,7 @@ class OrderHandler:
                             created_at, updated_at
                         ) VALUES (
                             %s, %s, %s, %s,
-                            'delivery', 'pending', %s,
+                            'voice', 'pending', %s,
                             %s, %s, %s, 0,
                             %s, 'PKR',
                             %s, %s,
