@@ -32,6 +32,9 @@ COPY --from=build /app/dist ./dist
 # Copy migrations and database directory
 COPY --from=build /app/database ./database
 
+# Copy source code for migrations resolution
+COPY --from=build /app/src ./src
+
 # EXPOSE port
 EXPOSE 3000
 
