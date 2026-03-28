@@ -11,8 +11,9 @@ import { UserRole } from "@/middleware/rbac";
 export const canAccess = (userRole: UserRole, requiredRole: UserRole): boolean => {
   const roleHierarchy: Record<UserRole, number> = {
     customer: 1,
-    restaurant_owner: 2,
-    admin: 3,
+    branch_user: 2,
+    restaurant_owner: 3,
+    admin: 4,
   };
 
   return roleHierarchy[userRole] >= roleHierarchy[requiredRole];
@@ -45,6 +46,7 @@ export const isCustomer = (role: UserRole): boolean => {
 export const getRoleDisplayName = (role: UserRole): string => {
   const displayNames: Record<UserRole, string> = {
     customer: "Customer",
+    branch_user: "Branch User",
     restaurant_owner: "Restaurant Owner",
     admin: "Administrator",
   };

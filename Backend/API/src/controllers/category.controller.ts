@@ -29,10 +29,11 @@ export class CategoryController {
       const response: ApiResponse = {
         success: true,
         data: result.items,
-        meta: {
+        pagination: {
           total: result.total,
           page: pagination.page || 1,
           limit: pagination.limit || 100,
+          totalPages: Math.ceil(result.total / (pagination.limit || 100))
         },
       };
       
