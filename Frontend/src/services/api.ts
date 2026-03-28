@@ -244,6 +244,28 @@ export class ApiService {
     );
   }
 
+  async googleLogin(idToken: string) {
+    return this.request<{
+      access_token: string;
+      refresh_token: string;
+      user: {
+        user_id: string;
+        name: string;
+        email?: string;
+        phone?: string;
+        role: string;
+        picture?: string;
+      };
+    }>(
+      "/auth/google-login",
+      {
+        method: "POST",
+        body: JSON.stringify({ idToken }),
+      },
+      true
+    );
+  }
+
   async refreshToken(refreshToken: string) {
     return this.request<{ access_token: string }>(
       "/auth/refresh",

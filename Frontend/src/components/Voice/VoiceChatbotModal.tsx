@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Mic, MicOff, X, Send, RotateCcw, MessageSquare, Settings, Volume2 } from "lucide-react";
-import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
+import { useWhisperTranscription } from "../../hooks/useWhisperTranscription";
 import ChatbotService, { ChatbotMessage, ChatbotResponse } from "../../services/chatbotService";
 import Button from "../Common/Button";
 import { speakWithUplift, stopUpliftTTS } from "../../services/ttsService";
@@ -29,9 +29,11 @@ const getChatbotBaseUrl = (): string => {
 };
 
 const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }) => {
-  const { isListening, transcript, isSupported, error, startListening, stopListening, resetTranscript } = useSpeechRecognition();
+  const { isListening, transcript, isTranscribing, error, startListening, stopListening, resetTranscript } = useWhisperTranscription();
   const { state } = useApp();
   const user = state.user;
+
+  const isSupported = true; // MediaRecorder is widely supported
 
   // Use the logged-in user's UUID as session_id so orders are linked to their account
   const sessionId = useRef<string>(user?.id || `session_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`);
@@ -65,8 +67,16 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
   useEffect(() => {
     if (transcript && !isProcessing) {
       setInputMessage(transcript);
+      
+      // Auto-send to chatbot when a full transcript arrives from Whisper
+      if (transcript.trim().length > 0) {
+        // Use a tiny timeout to ensure inputMessage state has settled or just call with transcript directly
+        setTimeout(() => {
+          handleSendMessage();
+        }, 100);
+      }
     }
-  }, [transcript, isProcessing]);
+  }, [transcript]);
 
   useEffect(() => {
     chatbotService.current.setBaseUrl(apiUrl);
@@ -509,7 +519,18 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
           {/* Status Messages */}
           <div className="mt-3 space-y-1">
             {error && <p className="text-sm text-red-600">{error}</p>}
-            {isListening && <p className="text-sm text-blue-600">Listening... Speak now</p>}
+            {isListening && (
+              <p className="text-sm text-blue-600">
+                {isTranscribing ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                    Transcribing with Whisper...
+                  </span>
+                ) : (
+                  "Listening... Speak now"
+                )}
+              </p>
+            )}
             {transcript && <p className="text-sm text-gray-600">Transcribed: "{transcript}"</p>}
           </div>
         </div>

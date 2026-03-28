@@ -5,6 +5,8 @@ import { useApp } from "../../contexts/AppContext";
 import { apiService } from "../../services/api";
 import MapAddressSelector from "../../components/Location/MapAddressSelector";
 import { motion, AnimatePresence } from "framer-motion";
+import { auth, googleProvider } from "../../config/firebase";
+import { signInWithPopup } from "firebase/auth";
 
 const Signup: React.FC = () => {
     const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -23,13 +25,13 @@ const Signup: React.FC = () => {
     const [city, setCity] = useState("");
     const [province, setProvince] = useState("");
     const [postalCode, setPostalCode] = useState("");
-    const [country, setCountry] = useState("Pakistan");
+    const [country] = useState("Pakistan");
     const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
     const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isMapOpen, setIsMapOpen] = useState(false);
     
     // Other fields
-    const [preferredLanguage, setPreferredLanguage] = useState<"en" | "ur">("en");
+    const [preferredLanguage] = useState<"en" | "ur">("en");
     const [role, setRole] = useState<"customer" | "restaurant_owner">("customer");
     
     // Validation states
@@ -161,13 +163,12 @@ const Signup: React.FC = () => {
 
                     if (loginResponse.success && loginResponse.data) {
                         apiService.setToken(loginResponse.data.access_token);
-                        let userRole: string = loginResponse.data.user.role; 
                         
                         try {
                             const userResponse = await apiService.getUser(loginResponse.data.user.user_id);
                             if (userResponse.success && userResponse.data) {
-                                userRole = userResponse.data.role;
-                                const backendAddresses = (userResponse.data.addresses || []).map((addr: any, idx: number) => ({
+                                const profile = userResponse.data as any;
+                                const backendAddresses = (profile.addresses || []).map((addr: any, idx: number) => ({
                                     id: addr.id || `addr-${idx}`,
                                     type: (addr.type || 'home') as 'home' | 'work' | 'other',
                                     label: addr.label || addr.street || 'Address',
@@ -175,7 +176,7 @@ const Signup: React.FC = () => {
                                     city: addr.city || '',
                                     coordinates: {
                                         lat: addr.lat || addr.coordinates?.lat || 0,
-                                        lng: addr.lng || addr.coordinates?.lng || 0,
+                                        lng: addr.lng || addr.coordinates?.lng || 1,
                                     },
                                     isDefault: addr.is_default || false,
                                 }));
@@ -183,62 +184,50 @@ const Signup: React.FC = () => {
                                 dispatch({
                                     type: "SET_USER",
                                     payload: {
-                                        id: userResponse.data.user_id,
-                                        email: userResponse.data.email || "",
-                                        phone: userResponse.data.phone || "",
-                                        name: userResponse.data.name,
-                                        role: userResponse.data.role as 'customer' | 'restaurant_owner' | 'admin',
+                                        id: profile.user_id,
+                                        email: profile.email || "",
+                                        phone: profile.phone || "",
+                                        name: profile.name,
+                                        role: profile.role as any,
                                         isVerified: true,
                                         addresses: backendAddresses,
                                         paymentMethods: [],
-                                        createdAt: new Date(userResponse.data.created_at || Date.now()),
+                                        createdAt: new Date(profile.created_at || Date.now()),
                                     },
                                 });
-                            } else {
-                                dispatch({
-                                    type: "SET_USER",
-                                    payload: {
-                                        id: loginResponse.data.user.user_id,
-                                        email: loginResponse.data.user.email || "",
-                                        phone: loginResponse.data.user.phone || "",
-                                        name: loginResponse.data.user.name,
-                                        role: loginResponse.data.user.role as 'customer' | 'restaurant_owner' | 'admin',
-                                        isVerified: true,
-                                        addresses: [],
-                                        paymentMethods: [],
-                                        createdAt: new Date(),
-                                    },
-                                });
+
+                                if (profile.role === 'admin') navigate("/admin");
+                                else if (profile.role === 'restaurant_owner') navigate("/restaurant-owner");
+                                else navigate("/dashboard");
+                                return;
                             }
                         } catch (err) {
-                            dispatch({
-                                type: "SET_USER",
-                                payload: {
-                                    id: loginResponse.data.user.user_id,
-                                    email: loginResponse.data.user.email || "",
-                                    phone: loginResponse.data.user.phone || "",
-                                    name: loginResponse.data.user.name,
-                                    role: loginResponse.data.user.role as 'customer' | 'restaurant_owner' | 'admin',
-                                    isVerified: true,
-                                    addresses: [],
-                                    paymentMethods: [],
-                                    createdAt: new Date(),
-                                },
-                            });
+                            // Fallback
                         }
 
-                        if (userRole === 'admin') navigate("/admin");
-                        else if (userRole === 'restaurant_owner') navigate("/restaurant-owner");
+                        const basicUser = loginResponse.data.user as any;
+                        dispatch({
+                            type: "SET_USER",
+                            payload: {
+                                id: basicUser.user_id,
+                                email: basicUser.email || "",
+                                phone: basicUser.phone || "",
+                                name: basicUser.name,
+                                role: basicUser.role as any,
+                                isVerified: true,
+                                addresses: [],
+                                paymentMethods: [],
+                                createdAt: new Date(),
+                            },
+                        });
+
+                        if (basicUser.role === 'admin') navigate("/admin");
+                        else if (basicUser.role === 'restaurant_owner') navigate("/restaurant-owner");
                         else navigate("/dashboard");
                         return;
                     }
                 } catch (loginErr: any) {
-                    const errorMsg = loginErr.message || "";
-                    if (errorMsg.includes("password") || errorMsg.includes("Password")) {
-                        setError("Account created, but password setup failed. Please contact support.");
-                    } else {
-                        setError(`Account created! Auto-login failed: ${errorMsg}.`);
-                    }
+                    setError(`Account created! Auto-login failed: ${loginErr.message}.`);
                     setTimeout(() => { navigate("/login"); }, 3000);
                     return;
                 }
@@ -247,19 +236,81 @@ const Signup: React.FC = () => {
                 setTimeout(() => { navigate("/login"); }, 2000);
             }
         } catch (err: any) {
-            const errorMessage = err.message || "Signup failed. Please try again.";
-            if (errorMessage.includes("already exists")) {
-                setError(`${errorMessage} Please try logging in instead.`);
-            } else {
-                setError(errorMessage);
+            setError(err.message || "Signup failed. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleGoogleSignup = async () => {
+        setIsLoading(true);
+        setError("");
+        try {
+            const result = await signInWithPopup(auth, googleProvider);
+            const idToken = await result.user.getIdToken();
+            
+            const response = await apiService.googleLogin(idToken);
+            
+            if (response.success && response.data) {
+                apiService.setToken(response.data.access_token);
+                
+                try {
+                    const userResponse = await apiService.getUser(response.data.user.user_id);
+                    if (userResponse.success && userResponse.data) {
+                        const profile = userResponse.data as any;
+                        dispatch({
+                            type: "SET_USER",
+                            payload: {
+                                id: profile.user_id,
+                                email: profile.email || "",
+                                phone: profile.phone || "",
+                                name: profile.name,
+                                role: profile.role as any,
+                                isVerified: true,
+                                addresses: profile.addresses || [],
+                                paymentMethods: [],
+                                createdAt: new Date(profile.created_at || Date.now()),
+                            },
+                        });
+
+                        if (profile.role === 'admin') navigate("/admin");
+                        else if (profile.role === 'restaurant_owner') navigate("/restaurant-owner");
+                        else navigate("/dashboard");
+                        return;
+                    }
+                } catch (e) {
+                    // Fallback
+                }
+
+                const basicUser = response.data.user as any;
+                dispatch({
+                    type: "SET_USER",
+                    payload: {
+                        id: basicUser.user_id,
+                        email: basicUser.email || "",
+                        phone: basicUser.phone || "",
+                        name: basicUser.name,
+                        role: basicUser.role as any,
+                        isVerified: true,
+                        addresses: [],
+                        paymentMethods: [],
+                        createdAt: new Date(),
+                    },
+                });
+
+                if (basicUser.role === 'admin') navigate("/admin");
+                else if (basicUser.role === 'restaurant_owner') navigate("/restaurant-owner");
+                else navigate("/dashboard");
             }
+        } catch (err: any) {
+            setError(err.message || "Google Sign-Up failed.");
         } finally {
             setIsLoading(false);
         }
     };
 
     // Form variant animations
-    const slideVariants = {
+    const slideVariants: any = {
         enter: (direction: number) => ({
             x: direction > 0 ? 50 : -50,
             opacity: 0
@@ -431,6 +482,41 @@ const Signup: React.FC = () => {
                                             className="group relative w-full py-4 mt-4 rounded-xl font-bold transition-all flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed bg-cyan-500 text-[#050505] hover:bg-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.3)] disabled:shadow-none"
                                         >
                                             Next Step
+                                        </button>
+
+                                        <div className="relative py-4">
+                                            <div className="absolute inset-0 flex items-center">
+                                                <div className="w-full border-t border-white/5"></div>
+                                            </div>
+                                            <div className="relative flex justify-center text-xs uppercase tracking-widest font-semibold">
+                                                <span className="px-4 bg-[#050505] text-gray-500 rounded-full border border-white/5">or</span>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={handleGoogleSignup}
+                                            disabled={isLoading}
+                                            className="w-full py-3.5 rounded-xl font-semibold border border-white/10 flex items-center justify-center gap-3 text-gray-300 hover:bg-white/5 hover:text-white transition-all shadow-lg"
+                                        >
+                                            <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                                />
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                                />
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"
+                                                />
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                                                />
+                                            </svg>
+                                            Sign up with Google
                                         </button>
                                     </motion.div>
                                 )}

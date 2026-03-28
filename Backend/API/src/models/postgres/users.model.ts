@@ -18,6 +18,7 @@ export class UserModel {
         favorite_restaurants,
         dietary_preferences,
         addresses,
+        firebase_uid,
         created_at,
         last_active_at
       FROM users
@@ -44,6 +45,7 @@ export class UserModel {
         favorite_restaurants,
         dietary_preferences,
         addresses,
+        firebase_uid,
         created_at,
         last_active_at
       FROM users
@@ -67,6 +69,7 @@ export class UserModel {
           favorite_restaurants,
           dietary_preferences,
           addresses,
+          firebase_uid,
           password_hash,
           created_at,
           last_active_at
@@ -109,6 +112,7 @@ export class UserModel {
               favorite_restaurants,
               dietary_preferences,
               addresses,
+              firebase_uid,
               password_hash,
               created_at,
               last_active_at
@@ -128,6 +132,7 @@ export class UserModel {
               favorite_restaurants,
               dietary_preferences,
               addresses,
+              firebase_uid,
               created_at,
               last_active_at
             FROM users
@@ -190,10 +195,33 @@ export class UserModel {
       throw error;
     }
   }
+ 
+  static async findByFirebaseUid(firebaseUid: string): Promise<User | null> {
+    const result = await sql`
+      SELECT
+        user_id,
+        email,
+        phone,
+        name,
+        role,
+        restaurant_id,
+        location_id,
+        preferred_language,
+        favorite_restaurants,
+        dietary_preferences,
+        addresses,
+        firebase_uid,
+        created_at,
+        last_active_at
+      FROM users
+      WHERE firebase_uid = ${firebaseUid}
+    `;
+    return (result[0] as User) || null;
+  }
 
   static async create(data: CreateUserDto): Promise<User> {
     // Check if user already exists by email or phone
-    let existingUser: (User & { password_hash?: string }) | null = null;
+    let existingUser: (User & { password_hash?: string | null }) | null = null;
     
     if (data.email) {
       existingUser = await this.findByEmail(data.email, true);
@@ -223,6 +251,7 @@ export class UserModel {
           favorite_restaurants = ${data.favorite_restaurants || existingUser.favorite_restaurants},
           dietary_preferences = ${data.dietary_preferences || existingUser.dietary_preferences},
           addresses = ${data.addresses || existingUser.addresses},
+          firebase_uid = ${data.firebase_uid || existingUser.firebase_uid || null},
           last_active_at = NOW()
         WHERE user_id = ${existingUser.user_id}
         RETURNING 
@@ -237,6 +266,7 @@ export class UserModel {
           favorite_restaurants,
           dietary_preferences,
           addresses,
+          firebase_uid,
           created_at,
           last_active_at
       `;
@@ -275,6 +305,7 @@ export class UserModel {
           favorite_restaurants,
           dietary_preferences,
           addresses,
+          firebase_uid,
           created_at,
           last_active_at
         ) VALUES (
@@ -290,6 +321,7 @@ export class UserModel {
           ${data.favorite_restaurants || []},
           ${data.dietary_preferences || []},
           ${data.addresses || []},
+          ${data.firebase_uid || null},
           NOW(),
           NOW()
         )
@@ -305,6 +337,7 @@ export class UserModel {
           favorite_restaurants,
           dietary_preferences,
           addresses,
+          firebase_uid,
           created_at,
           last_active_at
       `;
@@ -353,6 +386,7 @@ export class UserModel {
         favorite_restaurants = ${updated.favorite_restaurants},
         dietary_preferences = ${updated.dietary_preferences},
         addresses = ${updated.addresses},
+        firebase_uid = ${updated.firebase_uid || null},
         last_active_at = ${updated.last_active_at}
       WHERE user_id = ${userId}
       RETURNING *

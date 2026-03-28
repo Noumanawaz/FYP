@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Mic, MicOff, X, Bot } from "lucide-react";
-import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
+import { useWhisperTranscription } from "../../hooks/useWhisperTranscription";
 import { VoiceOrderProcessor, ParsedOrder } from "../../utils/voiceOrderProcessor";
 import OrderConfirmationModal from "./OrderConfirmationModal";
 import Button from "../Common/Button";
@@ -28,7 +28,9 @@ interface VoiceOrderModalProps {
 
 
 const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOrderSubmit }) => {
-  const { isListening, transcript, isSupported, startListening, stopListening, resetTranscript } = useSpeechRecognition();
+  const { isListening, transcript, isTranscribing, error, startListening, stopListening, resetTranscript } = useWhisperTranscription();
+
+  const isSupported = true; // MediaRecorder is widely supported
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -41,7 +43,6 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   const isSpeakingRef = useRef<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper to get voices, waiting for them to load if necessary
   const getVoices = (): Promise<SpeechSynthesisVoice[]> => {
@@ -227,13 +228,14 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
   // Backend integration replaces local stubbed responses
 
-  const handleSendMessage = async () => {
-    if (!inputText.trim() || isProcessing) return;
+  const handleSendMessage = async (textOverride?: string) => {
+    const textToSend = textOverride || inputText.trim();
+    if (!textToSend || isProcessing) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       type: "user",
-      content: inputText.trim(),
+      content: textToSend,
       timestamp: new Date(),
     };
 
@@ -253,8 +255,10 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
     setMessages((prev) => [...prev, typingMessage]);
 
     try {
+      console.info("[OrderModal] Sending message to chatbot API...", textToSend);
       // Send transcribed text to backend
-      const resp = await chatbotServiceRef.current.sendMessage(userMessage.content);
+      const resp = await chatbotServiceRef.current.sendMessage(textToSend);
+      console.info("[OrderModal] Received response from chatbot API:", resp);
 
       // Remove typing indicator
       setMessages((prev) => prev.filter((msg) => msg.id !== "typing"));
@@ -274,7 +278,6 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
       // Speak Urdu if available; else English
       speak(speakText, () => {
         // Auto-resume listening after AI finishes speaking, if call is still active
-        // Add a small delay to prevent the mic from picking up the very end of the AI's speech (echo)
         if (isOpen && !isProcessing) {
           setTimeout(() => {
             startListening();
@@ -283,11 +286,12 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
       });
 
       // If backend implies an order, try parsing for confirmation modal
-      const parsed = VoiceOrderProcessor.parseOrder(userMessage.content);
+      const parsed = VoiceOrderProcessor.parseOrder(textToSend);
       if (parsed.items.length > 0) {
         setParsedOrder(parsed);
       }
     } catch (e) {
+      console.error("[OrderModal] Chat API error:", e);
       // Remove typing indicator
       setMessages((prev) => prev.filter((msg) => msg.id !== "typing"));
       const errorMessage: Message = {
@@ -354,33 +358,13 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
     onClose();
   };
 
-  // Silence Detection Logic
-  useEffect(() => {
-    // Only run if listening and we have some text
-    if (isListening && transcript.length > 0) {
-      // Clear existing timer on every transcript change (debounce)
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-
-      // Set new timer for 1.5s
-      silenceTimerRef.current = setTimeout(() => {
-        console.log("[VoiceOrderModal] Silence detected (1.5s), stopping listening to auto-send...");
-        stopListening();
-        // The existing useEffect for (!isListening && transcript) will handle the specific sendMessage call
-      }, 1500);
-    } else {
-      // Cleanup if not listening or empty
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    }
-
-    return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    }
-  }, [transcript, isListening, stopListening]);
+  // Silence detection is now handled natively by our useWhisperTranscription hook.
+  // The hook automatically calls stopListening() when silence is detected.
 
   // Auto-send when listening stops and we have a transcript
   useEffect(() => {
     if (!isListening && transcript && transcript.trim().length > 0 && !isProcessing && !isSpeaking) {
-      handleSendMessage();
+      handleSendMessage(transcript);
     }
   }, [isListening, transcript, isProcessing, isSpeaking]);
 
@@ -539,13 +523,15 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
                 </div>
 
                 {/* Status Text */}
-                <span className={`text-xs font-bold tracking-[0.2em] uppercase transition-colors duration-500 mb-6 ${isListening ? "text-primary-400" :
+                <span className={`text-xs font-bold tracking-[0.2em] uppercase transition-colors duration-500 mb-2 ${isListening ? (isTranscribing ? "text-blue-400" : "text-primary-400") :
                   isProcessing ? "text-blue-400" :
                     isSpeaking ? "text-green-400" :
                       "text-slate-500"
                   }`}>
-                  {isListening ? "Listening..." : isProcessing ? "Thinking..." : isSpeaking ? "Speaking..." : "Standby"}
+                  {isListening ? (isTranscribing ? "Transcribing..." : "Listening...") : isProcessing ? "Thinking..." : isSpeaking ? "Speaking..." : "Standby"}
                 </span>
+
+                {error && <p className="text-[10px] text-red-400 font-medium mb-4 animate-pulse">{error}</p>}
 
                 {/* Buttons */}
                 <div className="flex gap-6 items-center">

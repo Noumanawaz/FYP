@@ -180,6 +180,7 @@ export interface User {
   favorite_restaurants: string[];
   dietary_preferences: string[];
   addresses: Record<string, any>[];
+  firebase_uid?: string | null;
   created_at: Date;
   last_active_at: Date;
 }
@@ -196,6 +197,7 @@ export interface CreateUserDto {
   favorite_restaurants?: string[];
   dietary_preferences?: string[];
   addresses?: Record<string, any>[];
+  firebase_uid?: string | null;
 }
 
 export interface UpdateUserDto {
@@ -209,6 +211,7 @@ export interface UpdateUserDto {
   favorite_restaurants?: string[];
   dietary_preferences?: string[];
   addresses?: Record<string, any>[];
+  firebase_uid?: string | null;
   last_active_at?: Date;
 }
 

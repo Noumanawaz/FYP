@@ -7,6 +7,7 @@ import userRoutes from "./user.routes";
 import mongodbRoutes from "./mongodb.routes";
 import authRoutes from "./auth.routes";
 import imageRoutes from "./image.routes";
+import speechRoutes from "./speech.routes";
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.use(`/${apiVersion}/orders`, orderRoutes);
 router.use(`/${apiVersion}/users`, userRoutes);
 router.use(`/${apiVersion}/mongodb`, mongodbRoutes);
 router.use(`/${apiVersion}/images`, imageRoutes);
+router.use(`/${apiVersion}/speech`, speechRoutes);
 
 /**
  * @openapi

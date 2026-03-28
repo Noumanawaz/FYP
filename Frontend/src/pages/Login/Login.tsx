@@ -4,6 +4,8 @@ import { Mail, Lock, Phone, ArrowLeft, Mic } from "lucide-react";
 import { useApp } from "../../contexts/AppContext";
 import { apiService } from "../../services/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { auth, googleProvider } from "../../config/firebase";
+import { signInWithPopup } from "firebase/auth";
 
 const Login: React.FC = () => {
     const [step, setStep] = useState<"email" | "phone" | "password">("email");
@@ -54,14 +56,12 @@ const Login: React.FC = () => {
             if (response.success && response.data) {
                 apiService.setToken(response.data.access_token);
                 
-                // Fetch user from database to get the actual role
+                // Fetch full user profile
                 try {
                     const userResponse = await apiService.getUser(response.data.user.user_id);
                     if (userResponse.success && userResponse.data) {
-                        const userRole = userResponse.data.role;
-                        
-                        // Convert backend addresses to frontend format
-                        const backendAddresses = (userResponse.data.addresses || []).map((addr: any, idx: number) => ({
+                        const profile = userResponse.data as any;
+                        const backendAddresses = (profile.addresses || []).map((addr: any, idx: number) => ({
                             id: addr.id || `addr-${idx}`,
                             type: (addr.type || 'home') as 'home' | 'work' | 'other',
                             label: addr.label || addr.street || 'Address',
@@ -77,85 +77,120 @@ const Login: React.FC = () => {
                         dispatch({
                             type: "SET_USER",
                             payload: {
-                                id: userResponse.data.user_id,
-                                email: userResponse.data.email || "",
-                                phone: userResponse.data.phone || "",
-                                name: userResponse.data.name,
-                                role: userRole as 'customer' | 'restaurant_owner' | 'branch_user' | 'admin',
+                                id: profile.user_id,
+                                email: profile.email || "",
+                                phone: profile.phone || "",
+                                name: profile.name,
+                                role: profile.role as any,
                                 isVerified: true,
                                 addresses: backendAddresses,
                                 paymentMethods: [],
-                                createdAt: new Date(userResponse.data.created_at || Date.now()),
+                                createdAt: new Date(profile.created_at || Date.now()),
                             },
                         });
 
-                        // Redirect based on role from database
-                        if (userRole === 'admin') {
-                            navigate("/admin");
-                        } else if (userRole === 'restaurant_owner') {
-                            navigate("/restaurant-owner");
-                        } else if (userRole === 'branch_user') {
-                            navigate("/branch-owner");
-                        } else {
-                            navigate("/dashboard");
-                        }
-                    } else {
-                        // Fallback to role from login response
-                        dispatch({
-                            type: "SET_USER",
-                            payload: {
-                                id: response.data.user.user_id,
-                                email: response.data.user.email || "",
-                                phone: response.data.user.phone || "",
-                                name: response.data.user.name,
-                                role: response.data.user.role as 'customer' | 'restaurant_owner' | 'branch_user' | 'admin',
-                                isVerified: true,
-                                addresses: [],
-                                paymentMethods: [],
-                                createdAt: new Date(),
-                            },
-                        });
-
-                        if (response.data.user.role === 'admin') {
-                            navigate("/admin");
-                        } else if (response.data.user.role === 'restaurant_owner') {
-                            navigate("/restaurant-owner");
-                        } else if (response.data.user.role === 'branch_user') {
-                            navigate("/branch-owner");
-                        } else {
-                            navigate("/dashboard");
-                        }
+                        const userRole = profile.role;
+                        if (userRole === 'admin') navigate("/admin");
+                        else if (userRole === 'restaurant_owner') navigate("/restaurant-owner");
+                        else if (userRole === 'branch_user') navigate("/branch-owner");
+                        else navigate("/dashboard");
+                        return;
                     }
-                } catch (fetchError) {
-                    // If fetching user fails, use role from login response
-                    dispatch({
-                        type: "SET_USER",
-                        payload: {
-                            id: response.data.user.user_id,
-                            email: response.data.user.email || "",
-                            phone: response.data.user.phone || "",
-                            name: response.data.user.name,
-                            role: response.data.user.role as 'customer' | 'restaurant_owner' | 'branch_user' | 'admin',
-                            isVerified: true,
-                            addresses: [],
-                            paymentMethods: [],
-                            createdAt: new Date(),
-                        },
-                    });
-
-                    if (response.data.user.role === 'admin') {
-                        navigate("/admin");
-                    } else if (response.data.user.role === 'restaurant_owner') {
-                        navigate("/restaurant-owner");
-                    } else if (response.data.user.role === 'branch_user') {
-                        navigate("/branch-owner");
-                    } else {
-                        navigate("/dashboard");
-                    }
+                } catch (e) {
+                    // Fallback
                 }
+
+                const basicUser = response.data.user as any;
+                dispatch({
+                    type: "SET_USER",
+                    payload: {
+                        id: basicUser.user_id,
+                        email: basicUser.email || "",
+                        phone: basicUser.phone || "",
+                        name: basicUser.name,
+                        role: basicUser.role as any,
+                        isVerified: true,
+                        addresses: [],
+                        paymentMethods: [],
+                        createdAt: new Date(),
+                    },
+                });
+
+                if (basicUser.role === 'admin') navigate("/admin");
+                else if (basicUser.role === 'restaurant_owner') navigate("/restaurant-owner");
+                else if (basicUser.role === 'branch_user') navigate("/branch-owner");
+                else navigate("/dashboard");
             }
         } catch (err: any) {
             setError(err.message || "Login failed. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleGoogleLogin = async () => {
+        setIsLoading(true);
+        setError("");
+        try {
+            const result = await signInWithPopup(auth, googleProvider);
+            const idToken = await result.user.getIdToken();
+            
+            const response = await apiService.googleLogin(idToken);
+            
+            if (response.success && response.data) {
+                apiService.setToken(response.data.access_token);
+                
+                try {
+                    const userResponse = await apiService.getUser(response.data.user.user_id);
+                    if (userResponse.success && userResponse.data) {
+                        const profile = userResponse.data as any;
+                        dispatch({
+                            type: "SET_USER",
+                            payload: {
+                                id: profile.user_id,
+                                email: profile.email || "",
+                                phone: profile.phone || "",
+                                name: profile.name,
+                                role: profile.role as any,
+                                isVerified: true,
+                                addresses: profile.addresses || [],
+                                paymentMethods: [],
+                                createdAt: new Date(profile.created_at || Date.now()),
+                            },
+                        });
+                        
+                        if (profile.role === 'admin') navigate("/admin");
+                        else if (profile.role === 'restaurant_owner') navigate("/restaurant-owner");
+                        else if (profile.role === 'branch_user') navigate("/branch-owner");
+                        else navigate("/dashboard");
+                        return;
+                    }
+                } catch (e) {
+                    // Fallback
+                }
+
+                const basicUser = response.data.user as any;
+                dispatch({
+                    type: "SET_USER",
+                    payload: {
+                        id: basicUser.user_id,
+                        email: basicUser.email || "",
+                        phone: basicUser.phone || "",
+                        name: basicUser.name,
+                        role: basicUser.role as any,
+                        isVerified: true,
+                        addresses: [],
+                        paymentMethods: [],
+                        createdAt: new Date(),
+                    },
+                });
+
+                if (basicUser.role === 'admin') navigate("/admin");
+                else if (basicUser.role === 'restaurant_owner') navigate("/restaurant-owner");
+                else navigate("/dashboard");
+            }
+        } catch (err: any) {
+            setError(err.message || "Google Sign-In failed.");
         } finally {
             setIsLoading(false);
         }
@@ -196,7 +231,7 @@ const Login: React.FC = () => {
     };
 
     // Animation Variants
-    const fadeUpVariants = {
+    const fadeUpVariants: any = {
         hidden: { opacity: 0, y: 30 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
         exit: { opacity: 0, y: -20, transition: { duration: 0.3 } }
@@ -330,9 +365,36 @@ const Login: React.FC = () => {
                                                 setLoginMethod(step === "email" ? "phone" : "email");
                                                 setError("");
                                             }}
-                                            className="w-full py-3.5 rounded-xl font-semibold border border-white/10 text-gray-300 hover:bg-white/5 hover:text-white transition-all"
+                                            className="w-full py-3.5 rounded-xl font-semibold border border-white/10 text-gray-300 hover:bg-white/5 hover:text-white transition-all mb-4"
                                         >
                                             {step === "email" ? "Use phone number" : "Use email instead"}
+                                        </button>
+
+                                        {/* Google Login Button */}
+                                        <button
+                                            onClick={handleGoogleLogin}
+                                            disabled={isLoading}
+                                            className="w-full py-3.5 rounded-xl font-semibold border border-white/10 flex items-center justify-center gap-3 text-gray-300 hover:bg-white/5 hover:text-white transition-all"
+                                        >
+                                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                                />
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                                />
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"
+                                                />
+                                                <path
+                                                    fill="currentColor"
+                                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                                                />
+                                            </svg>
+                                            Continue with Google
                                         </button>
                                     </motion.div>
                                 )}

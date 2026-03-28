@@ -6,6 +6,8 @@ import { UserService } from "@/services/user.service";
 import { UserModel } from "@/models/postgres/users.model";
 import { ApiResponse, User } from "@/types";
 import { Request, Response, NextFunction } from "express";
+import * as admin from "firebase-admin";
+import "@/config/firebase"; // Ensure firebase initialized
 
 const router = Router();
 
@@ -168,6 +170,82 @@ router.post(
         error: error instanceof Error ? error.message : "Invalid token",
       };
       res.status(401).json(response);
+    }
+  }
+);
+
+// Google Sign-In with Firebase
+router.post(
+  "/google-login",
+  [
+    body("idToken").notEmpty().withMessage("Firebase ID token required"),
+  ],
+  validate([]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { idToken } = req.body;
+
+      // 1. Verify Firebase Token
+      let decodedToken;
+      try {
+        decodedToken = await admin.auth().verifyIdToken(idToken);
+      } catch (error) {
+        return res.status(401).json({
+          success: false,
+          error: "Invalid or expired Firebase ID token",
+        });
+      }
+
+      const { uid, email, name, picture } = decodedToken;
+
+      // 2. Find or Create User
+      // First, try find by firebase_uid
+      let user = await UserModel.findByFirebaseUid(uid);
+
+      // If not found, try find by email (to link existing account)
+      if (!user && email) {
+        user = await UserModel.findByEmail(email) as User;
+        if (user) {
+          // Link firebase_uid to existing account
+          user = await UserModel.update(user.user_id, { firebase_uid: uid }) as User;
+        }
+      }
+
+      // If still not found, create new user
+      if (!user) {
+        user = await UserModel.create({
+          email: email || null,
+          name: name || "Google User",
+          firebase_uid: uid,
+          preferred_language: "en",
+          role: "customer",
+        });
+      }
+
+      // 3. Generate tokens (Maintains existing JWT + RAG session linkage)
+      const accessToken = await AuthService.generateToken(user.user_id);
+      const refreshToken = AuthService.generateRefreshToken(user.user_id);
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          user: {
+            user_id: user.user_id, // session_id for RAG uses user_id
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            picture, // Pass back profile picture if available from Google
+          },
+        },
+        message: "Google login successful",
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
     }
   }
 );
