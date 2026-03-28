@@ -29,6 +29,9 @@ RUN npm install --only=production
 # Copy built dist files from build stage
 COPY --from=build /app/dist ./dist
 
+# Copy migrations and database directory
+COPY --from=build /app/database ./database
+
 # EXPOSE port
 EXPOSE 3000
 
