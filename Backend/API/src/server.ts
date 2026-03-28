@@ -1,3 +1,5 @@
+// Initialize module path aliases for production build
+import "module-alias/register";
 import dotenv from "dotenv";
 dotenv.config();
 

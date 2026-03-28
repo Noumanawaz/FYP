@@ -25,9 +25,14 @@ async function runMigrations() {
       console.log(`📝 Running migration: ${file}...`);
       const sqlContent = fs.readFileSync(filePath, 'utf8');
       
-      // Split by semicolon to run multiple statements if needed, 
-      // but neon client can handle multiple statements in one call usually
-      await sql(sqlContent);
+      // Split the SQL by semicolon and filter out empty strings to run each command separately
+      const statements = sqlContent.split(';').filter(stmt => stmt.trim());
+      
+      for (const stmt of statements) {
+        if (stmt.trim()) {
+          await sql(stmt);
+        }
+      }
       console.log(`✅ ${file} completed successfully!`);
     } catch (error: any) {
       // Check if it's an "already exists" error, which we can ignore for simple migrations

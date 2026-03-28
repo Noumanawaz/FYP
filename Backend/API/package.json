@@ -51,7 +51,11 @@
     "yamljs": "^0.3.0",
     "zod": "^3.23.8",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "module-alias": "^2.2.3"
+  },
+  "_moduleAliases": {
+    "@": "dist"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
