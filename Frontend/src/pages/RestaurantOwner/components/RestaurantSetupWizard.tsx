@@ -829,7 +829,7 @@ const RestaurantSetupWizard: React.FC<RestaurantSetupWizardProps> = ({ onComplet
                     <button
                         type="button"
                         onClick={step === 1 ? onCancel : back}
-                        disabled={loading}
+                        disabled={submitting}
                         className="px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all flex items-center gap-2 border border-transparent hover:border-gray-200 dark:hover:border-white/10"
                     >
                         <ChevronLeft className="w-4 h-4" />
