@@ -47,7 +47,7 @@ class ChatbotService {
     this.sessionId = id;
   }
 
-  async sendMessage(message: string): Promise<ChatbotResponse> {
+  async sendMessage(message: string, userId?: string): Promise<ChatbotResponse> {
     try {
       // Add user message to conversation history
       this.conversationHistory.push({
@@ -64,6 +64,7 @@ class ChatbotService {
         body: JSON.stringify({
           message,
           session_id: this.sessionId,
+          user_id: userId,
         }),
       });
 

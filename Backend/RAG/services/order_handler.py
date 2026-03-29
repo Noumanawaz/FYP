@@ -88,14 +88,17 @@ class OrderHandler:
             print(f"⚠️ Radius check failed: {e}")
             return {"available": True, "location_id": None}
 
-    async def handle(self, query: str, history: list = None, summary: str = "", session_id: str = "default") -> Dict[str, Any]:
+    async def handle(self, query: str, history: list = None, summary: str = "", session_id: str = "default", user_id: str = None) -> Dict[str, Any]:
         if session_id not in self.order_context:
-            user_info = await self._fetch_user_info(session_id)
+            # Use real user_id if provided for DB lookup
+            uid_to_lookup = user_id or session_id
+            user_info = await self._fetch_user_info(uid_to_lookup)
             self.order_context[session_id] = {
                 "items": [], "restaurant_id": None, "restaurant_name": "Assistant",
                 "location_id": None, "phone": user_info.get("phone"),
                 "address": user_info.get("address"), "lat": user_info.get("lat"), 
-                "lng": user_info.get("lng"), "confirmed": False
+                "lng": user_info.get("lng"), "confirmed": False,
+                "user_id": user_id # Store real user_id in context
             }
         
         ctx = self.order_context[session_id]
@@ -302,7 +305,8 @@ class OrderHandler:
             conn = _get_conn()   # ← was incorrectly neon_vector_store._get_conn()
             with conn:
                 with conn.cursor() as cur:
-                    user_id = session_id if len(session_id) >= 32 else None
+                    # Prioritize real user_id from context, fallback to session_id if it looks like a UUID
+                    user_id = ctx.get("user_id") or (session_id if len(session_id) >= 32 else None)
                     subtotal = sum(float(i.get('price', 0)) * int(i.get('quantity', 1)) for i in ctx["items"])
                     tax_amount = round(subtotal * 0.15, 2)
                     delivery_fee = 100.0

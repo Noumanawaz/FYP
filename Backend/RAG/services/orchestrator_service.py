@@ -14,14 +14,14 @@ class OrchestratorService:
         self.complex_agent = ComplexHandler(llm_service, rag_system)
         self.order_agent = OrderHandler(llm_service, rag_system)
         
-    async def handle_query(self, query: str, session_id: str = "default_session") -> dict:
+    async def handle_query(self, query: str, session_id: str = "default_session", user_id: str = None) -> dict:
         """
         Processes a query by classifying it and delegating to the right specialized agent.
         Now manages session history and summaries.
         """
         import time
         start_time = time.time()
-        print(f"⏱️ [Orchestrator] Starting processing: '{query[:50]}...'")
+        print(f"⏱️ [Orchestrator] Starting processing: '{query[:50]}...' user_id: {user_id}")
         
         # 1. Manage Session - Record user message
         if self.session_manager:
@@ -45,7 +45,7 @@ class OrchestratorService:
         if category == "basic":
             result = await self.basic_agent.handle(query, history, summary)
         elif category == "order":
-            result = await self.order_agent.handle(query, history, summary, session_id)
+            result = await self.order_agent.handle(query, history, summary, session_id, user_id)
         else:
             result = await self.complex_agent.handle(query, history, summary)
         print(f"⏱️ [Orchestrator] Agent handled in {time.time() - delegate_start:.2f}s")

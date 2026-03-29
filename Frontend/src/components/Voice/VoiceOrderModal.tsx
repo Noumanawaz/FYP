@@ -7,6 +7,7 @@ import Button from "../Common/Button";
 import ChatbotService from "../../services/chatbotService";
 import { speakWithUplift, stopUpliftTTS } from "../../services/ttsService";
 import { getEnvVar } from "../../utils/env";
+import { useAppSelector } from "../../store/hooks";
 
 interface Message {
   id: string;
@@ -228,6 +229,8 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
   // Backend integration replaces local stubbed responses
 
+  const currentUser = useAppSelector((state) => state.users.currentUser);
+
   const handleSendMessage = async (textOverride?: string) => {
     const textToSend = textOverride || inputText.trim();
     if (!textToSend || isProcessing) return;
@@ -255,9 +258,9 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
     setMessages((prev) => [...prev, typingMessage]);
 
     try {
-      console.info("[OrderModal] Sending message to chatbot API...", textToSend);
-      // Send transcribed text to backend
-      const resp = await chatbotServiceRef.current.sendMessage(textToSend);
+      console.info("[OrderModal] Sending message to chatbot API...", textToSend, { userId: currentUser?.id });
+      // Send transcribed text to backend with user ID
+      const resp = await chatbotServiceRef.current.sendMessage(textToSend, currentUser?.id);
       console.info("[OrderModal] Received response from chatbot API:", resp);
 
       // Remove typing indicator

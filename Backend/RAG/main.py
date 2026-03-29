@@ -93,6 +93,7 @@ class ChatRequest(BaseModel):
     message: str
     restaurant_id: Optional[str] = None
     session_id: Optional[str] = "default_session"
+    user_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -117,10 +118,10 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=503, detail="System initializing")
     
     try:
-        print(f"💬 Chat: {request.message}")
+        print(f"💬 Chat: {request.message} (user_id: {request.user_id})")
         
         # Delegate to Orchestrator (which handles Agents)
-        result = await orchestrator.handle_query(request.message, request.session_id)
+        result = await orchestrator.handle_query(request.message, request.session_id, request.user_id)
         
         return ChatResponse(
             response=result.get("response", ""),
@@ -253,9 +254,10 @@ async def websocket_endpoint(websocket: WebSocket):
             if msg.get("type") == "chat":
                 text = msg.get("message", "")
                 session_id = msg.get("session_id", "default_session")
+                user_id = msg.get("user_id")
                 
                 # Use Orchestrator
-                result = await orchestrator.handle_query(text, session_id)
+                result = await orchestrator.handle_query(text, session_id, user_id)
                 
                 await websocket.send_text(json.dumps({
                     "type": "chat_response",
