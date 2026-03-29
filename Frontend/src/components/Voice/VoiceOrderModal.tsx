@@ -7,7 +7,7 @@ import Button from "../Common/Button";
 import ChatbotService from "../../services/chatbotService";
 import { speakWithUplift, stopUpliftTTS } from "../../services/ttsService";
 import { getEnvVar } from "../../utils/env";
-import { useAppSelector } from "../../store/hooks";
+import { useApp } from "../../contexts/AppContext";
 
 interface Message {
   id: string;
@@ -229,7 +229,8 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
 
   // Backend integration replaces local stubbed responses
 
-  const currentUser = useAppSelector((state) => state.users.currentUser);
+  const { state } = useApp();
+  const currentUser = state.user;
 
   const handleSendMessage = async (textOverride?: string) => {
     const textToSend = textOverride || inputText.trim();
