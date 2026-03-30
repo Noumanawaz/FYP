@@ -28,20 +28,22 @@ class OrderHandler:
             return R * c
         except: return 999.0
 
-    async def _fetch_user_info(self, session_id: str) -> Dict[str, Any]:
-        user_info = {"user_id": None, "phone": None, "address": None, "lat": None, "lng": None}
+    async def _fetch_user_info(self, user_id: str) -> Dict[str, Any]:
+        """Fetch user profile details (phone, address, coords) from DB using user_id."""
+        user_info = {"user_id": user_id, "phone": None, "address": None, "lat": None, "lng": None}
+        if not user_id: return user_info
+
         try:
-            # Check if session_id is a proper UUID
-            import re
+            # Check if user_id is a proper UUID
             is_uuid = bool(re.match(
                 r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-                session_id, re.IGNORECASE
+                user_id, re.IGNORECASE
             ))
             if is_uuid:
                 conn = _get_conn()
                 with conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT user_id, phone, addresses FROM users WHERE user_id = %s", (session_id,))
+                        cur.execute("SELECT user_id, phone, addresses FROM users WHERE user_id = %s", (user_id,))
                         row = cur.fetchone()
                         if row:
                             user_info["user_id"] = str(row[0])
@@ -50,9 +52,7 @@ class OrderHandler:
                             if addresses and isinstance(addresses, list) and len(addresses) > 0:
                                 addr_obj = addresses[0]
                                 if isinstance(addr_obj, dict):
-                                    # Try various common keys
                                     user_info["address"] = addr_obj.get("address") or addr_obj.get("full_address")
-                                    # Fallback: construct from components
                                     if not user_info["address"]:
                                         components = [addr_obj.get('street'), addr_obj.get('area'), addr_obj.get('city'), addr_obj.get('province')]
                                         user_info["address"] = ", ".join([str(c) for c in components if c])
@@ -60,26 +60,25 @@ class OrderHandler:
                                     user_info["lat"] = addr_obj.get("lat") or addr_obj.get("latitude")
                                     user_info["lng"] = addr_obj.get("lng") or addr_obj.get("longitude")
                                     
-                                    # Coordinate fallback if they are stored in street/city (seen in some test data)
+                                    # Coordinate fallback
                                     try:
                                         if not user_info["lat"] and addr_obj.get("street") and "." in str(addr_obj.get("street")):
-                                            # Potential coordinate swap or specific schema?
-                                            # Based on user record check: street='33.528411', city='73.097105'
                                             val_s = float(addr_obj.get("street"))
                                             val_c = float(addr_obj.get("city"))
-                                            if 20 < val_s < 40 and 60 < val_c < 80: # Roughly Pakistan bounds
+                                            if 20 < val_s < 40 and 60 < val_c < 80:
                                                 user_info["lat"] = val_s
                                                 user_info["lng"] = val_c
                                     except: pass
                                 else:
                                     user_info["address"] = str(addr_obj)
+                            
                             if user_info["phone"] or user_info["address"]:
-                                print(f"✅ [OrderHandler] Pre-loaded user info — id={user_info['user_id']} phone={'YES' if user_info['phone'] else 'NO'}")
+                                print(f"✅ [OrderHandler] Pre-loaded user info for {user_id} — phone={'YES' if user_info['phone'] else 'NO'}")
                 conn.close()
             else:
-                print(f"ℹ️ [OrderHandler] session_id '{session_id[:15]}...' is not a UUID — skipping initial user lookup")
+                print(f"ℹ️ [OrderHandler] ID '{user_id[:15]}...' is not a UUID — skipping DB lookup")
         except Exception as e:
-            print(f"⚠️ Error fetching user info: {e}")
+            print(f"⚠️ Error fetching user info for {user_id}: {e}")
         return user_info
 
     async def _lookup_user_id_by_phone(self, phone: str) -> Optional[str]:
@@ -133,18 +132,30 @@ class OrderHandler:
             return {"available": True, "location_id": None}
 
     async def handle(self, query: str, history: list = None, summary: str = "", session_id: str = "default", user_id: str = None) -> Dict[str, Any]:
+        # 0. Initialize or Update Context
         if session_id not in self.order_context:
-            # Use real user_id if provided for DB lookup
             uid_to_lookup = user_id or session_id
             user_info = await self._fetch_user_info(uid_to_lookup)
             self.order_context[session_id] = {
-                "items": [], "user_id": user_info.get("user_id"),
+                "items": [], "user_id": user_id or user_info.get("user_id"),
                 "restaurant_id": None, "restaurant_name": "Assistant",
                 "location_id": None, "phone": user_info.get("phone"),
                 "address": user_info.get("address"), "lat": user_info.get("lat"), 
-                "lng": user_info.get("lng"), "confirmed": False,
-                "user_id": user_id # Store real user_id in context
+                "lng": user_info.get("lng"), "confirmed": False
             }
+        else:
+            # Update user_id if provided mid-session and re-fetch profile if unknown
+            ctx = self.order_context[session_id]
+            if user_id and ctx.get("user_id") != user_id:
+                print(f"👤 [OrderHandler] Updating user_id for session {session_id}: {user_id}")
+                ctx["user_id"] = user_id
+                # Re-fetch profile info for the new user_id if phone/address are missing
+                if not ctx.get("phone") or not ctx.get("address"):
+                    user_info = await self._fetch_user_info(user_id)
+                    if user_info.get("phone"): ctx["phone"] = user_info["phone"]
+                    if user_info.get("address"): ctx["address"] = user_info["address"]
+                    if user_info.get("lat"): ctx["lat"] = user_info["lat"]
+                    if user_info.get("lng"): ctx["lng"] = user_info["lng"]
         
         ctx = self.order_context[session_id]
         
@@ -196,6 +207,17 @@ class OrderHandler:
 
         target_ids = [ctx["restaurant_id"]] if ctx["restaurant_id"] else None
         rag_info = await asyncio.to_thread(self.rag_system.search_comprehensive_info, query, target_ids)
+        
+        # 1b. If restaurant_id is still missing, infer it from RAG results
+        if not ctx["restaurant_id"] and rag_info.get("results"):
+            # Pick the first restaurant that returned results
+            for rid, rinfo in rag_info["results"].items():
+                if rinfo.get("data", {}).get("chunks"):
+                    ctx["restaurant_id"] = rid
+                    ctx["restaurant_name"] = rinfo["name"]
+                    print(f"🏠 [OrderHandler] Inferred restaurant: {ctx['restaurant_name']} ({rid})")
+                    break
+
         menu_context = self.rag_system.build_comprehensive_context(rag_info)
         
         # 2. Extract Intent with History Memory
@@ -321,17 +343,28 @@ class OrderHandler:
                 # Check if the user's latest query is a generic "yes" or "ok" vs a confirmation request
                 is_explicit_confirm = any(word in query_lower for word in ["yes", "han", "ji", "ok", "confirm", "order kar do", "kar do", "place"])
                 
-                if is_explicit_confirm and ctx.get("confirmation_details_shown"):
+                if (is_explicit_confirm and ctx.get("confirmation_details_shown")) or \
+                   (any(p in query_lower for p in ["confirm my order", "order confirm", "place my order", "order placement", "order kar do", "finalise"]) and ctx.get("phone") and ctx.get("address")):
                      # Actual placement
                     avail = await self._check_restaurant_availability(ctx["restaurant_id"], ctx["lat"], ctx["lng"])
                     if not avail["available"]:
-                        res_en = f"I'm sorry, {ctx['restaurant_name']} is too far for delivery."
+                        res_en = f"I'm sorry, {ctx['restaurant_name']} is too far for delivery. Please try another restaurant."
                         res_type = "error"
                     else:
                         ctx["location_id"] = avail["location_id"]
+                        # Ensure we have the latest user_id
+                        if user_id: ctx["user_id"] = user_id
+                        
                         if await self._save_order_to_db(ctx, session_id):
                             res_en = f"Success! Your order from {ctx['restaurant_name']} has been placed. It will be delivered to {ctx['address']}."
-                            self.order_context[session_id].update({"items": [], "confirmed": True, "restaurant_id": None, "confirmation_details_shown": False})
+                            print(f"📦 [OrderHandler] Order SUCCESS for {ctx.get('user_id')}")
+                            # Clear cart but KEEP user info for next time
+                            self.order_context[session_id].update({
+                                "items": [], 
+                                "confirmed": True, 
+                                "restaurant_id": None, 
+                                "confirmation_details_shown": False
+                            })
                         else:
                             res_en = "Database error while placing your order. Please try again."
                 else:
@@ -378,6 +411,8 @@ class OrderHandler:
                             user_id = session_id
                         elif ctx.get("phone"):
                             user_id = await self._lookup_user_id_by_phone(ctx["phone"])
+                    
+                    print(f"📝 [OrderHandler] Saving order to DB. UserID={user_id}, RestaurantID={ctx.get('restaurant_id')}, Items={len(ctx.get('items', []))}")
                     subtotal = sum(float(i.get('price', 0)) * int(i.get('quantity', 1)) for i in ctx["items"])
                     tax_amount = round(subtotal * 0.15, 2)
                     delivery_fee = 100.0
