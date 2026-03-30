@@ -29,9 +29,9 @@ class OrderHandler:
         except: return 999.0
 
     async def _fetch_user_info(self, session_id: str) -> Dict[str, Any]:
-        user_info = {"phone": None, "address": None, "lat": None, "lng": None}
+        user_info = {"user_id": None, "phone": None, "address": None, "lat": None, "lng": None}
         try:
-            # Check if session_id is a proper UUID (36 chars with hyphens, or 32 hex chars)
+            # Check if session_id is a proper UUID
             import re
             is_uuid = bool(re.match(
                 r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -41,27 +41,71 @@ class OrderHandler:
                 conn = _get_conn()
                 with conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT phone, addresses FROM users WHERE user_id = %s", (session_id,))
+                        cur.execute("SELECT user_id, phone, addresses FROM users WHERE user_id = %s", (session_id,))
                         row = cur.fetchone()
                         if row:
-                            user_info["phone"] = row[0]
-                            addresses = row[1]
+                            user_info["user_id"] = str(row[0])
+                            user_info["phone"] = row[1]
+                            addresses = row[2]
                             if addresses and isinstance(addresses, list) and len(addresses) > 0:
                                 addr_obj = addresses[0]
                                 if isinstance(addr_obj, dict):
+                                    # Try various common keys
                                     user_info["address"] = addr_obj.get("address") or addr_obj.get("full_address")
-                                    user_info["lat"] = addr_obj.get("lat")
-                                    user_info["lng"] = addr_obj.get("lng")
+                                    # Fallback: construct from components
+                                    if not user_info["address"]:
+                                        components = [addr_obj.get('street'), addr_obj.get('area'), addr_obj.get('city'), addr_obj.get('province')]
+                                        user_info["address"] = ", ".join([str(c) for c in components if c])
+                                    
+                                    user_info["lat"] = addr_obj.get("lat") or addr_obj.get("latitude")
+                                    user_info["lng"] = addr_obj.get("lng") or addr_obj.get("longitude")
+                                    
+                                    # Coordinate fallback if they are stored in street/city (seen in some test data)
+                                    try:
+                                        if not user_info["lat"] and addr_obj.get("street") and "." in str(addr_obj.get("street")):
+                                            # Potential coordinate swap or specific schema?
+                                            # Based on user record check: street='33.528411', city='73.097105'
+                                            val_s = float(addr_obj.get("street"))
+                                            val_c = float(addr_obj.get("city"))
+                                            if 20 < val_s < 40 and 60 < val_c < 80: # Roughly Pakistan bounds
+                                                user_info["lat"] = val_s
+                                                user_info["lng"] = val_c
+                                    except: pass
                                 else:
                                     user_info["address"] = str(addr_obj)
                             if user_info["phone"] or user_info["address"]:
-                                print(f"✅ [OrderHandler] Pre-loaded user info — phone={'YES' if user_info['phone'] else 'NO'} address={'YES' if user_info['address'] else 'NO'}")
+                                print(f"✅ [OrderHandler] Pre-loaded user info — id={user_info['user_id']} phone={'YES' if user_info['phone'] else 'NO'}")
                 conn.close()
             else:
-                print(f"ℹ️ [OrderHandler] session_id '{session_id[:15]}...' is not a UUID — skipping user DB lookup")
+                print(f"ℹ️ [OrderHandler] session_id '{session_id[:15]}...' is not a UUID — skipping initial user lookup")
         except Exception as e:
             print(f"⚠️ Error fetching user info: {e}")
         return user_info
+
+    async def _lookup_user_id_by_phone(self, phone: str) -> Optional[str]:
+        """Attempt to find a user_id by phone number."""
+        if not phone: return None
+        try:
+            # Clean phone for lookup (remove spaces, dashes etc if needed, but here we assume exact match or + prefix)
+            conn = _get_conn()
+            with conn:
+                with conn.cursor() as cur:
+                    # Try exact match
+                    cur.execute("SELECT user_id FROM users WHERE phone = %s", (phone,))
+                    row = cur.fetchone()
+                    if row:
+                        return str(row[0])
+                    
+                    # Try partial match if phone doesn't have + prefix (common for local input)
+                    if not phone.startswith('+'):
+                        cur.execute("SELECT user_id FROM users WHERE phone LIKE %s", (f"%{phone}",))
+                        row = cur.fetchone()
+                        if row:
+                            return str(row[0])
+            conn.close()
+        except Exception as e:
+            print(f"⚠️ Error looking up user by phone: {e}")
+        return None
 
     async def _check_restaurant_availability(self, restaurant_id: str, user_lat: Optional[float], user_lng: Optional[float]) -> Dict[str, Any]:
         if not user_lat or not user_lng:
@@ -94,7 +138,8 @@ class OrderHandler:
             uid_to_lookup = user_id or session_id
             user_info = await self._fetch_user_info(uid_to_lookup)
             self.order_context[session_id] = {
-                "items": [], "restaurant_id": None, "restaurant_name": "Assistant",
+                "items": [], "user_id": user_info.get("user_id"),
+                "restaurant_id": None, "restaurant_name": "Assistant",
                 "location_id": None, "phone": user_info.get("phone"),
                 "address": user_info.get("address"), "lat": user_info.get("lat"), 
                 "lng": user_info.get("lng"), "confirmed": False,
@@ -167,6 +212,10 @@ class OrderHandler:
         MENU CONTEXT FOR {ctx['restaurant_name']} (ONLY ADD ITEMS FROM HERE):
         {menu_context}
         
+        EXISTING_USER_INFO:
+        - Phone: {ctx.get('phone') or 'Not provided'}
+        - Address: {ctx.get('address') or 'Not provided'}
+
         RECENT CONVERSATION HISTORY:
         {history_msgs}
         
@@ -178,11 +227,10 @@ class OrderHandler:
         
         STRICT RULES:
         1. "add_item": ONLY extract items that appear in MENU CONTEXT above with a valid Item ID (UUID). Each item must have: name, quantity, price, item_id.
-        2. CRITICAL: If an item is in the HISTORY or SUMMARY but NOT in MENU CONTEXT with a UUID, DO NOT add it. Return intent="question" with error="Item not found in menu".
-        3. "remove_item": Provide a list of item names or 'item_id' to remove.
-        4. "confirm_order": User wants to finalize/confirm their current cart.
-        5. HISTORY RESOLUTION: If user says "yes", "han", "kar do" and history shows a suggestion, find that item in MENU CONTEXT. If found with a UUID → add_item. If not found → question with error.
-        6. NEVER add items based only on history or summary — they MUST be in MENU CONTEXT also.
+        2. "confirm_order": User wants to finalize/confirm. If phone/address are already in EXISTING_USER_INFO, DO NOT ask for them again unless the user wants to CHANGE them.
+        3. If phone or address are provided in NEW QUERY, extract them to update the info.
+        4. HISTORY RESOLUTION: If user says "yes", "han", "kar do" and history shows a suggestion, find that item in MENU CONTEXT. If found with a UUID → add_item. If not found → question with error.
+        5. NEVER add items based only on history or summary — they MUST be in MENU CONTEXT also.
         """
         
         messages = [
@@ -194,7 +242,13 @@ class OrderHandler:
         extraction = json.loads(extraction_raw) if extraction_raw else {}
         intent = extraction.get("intent", "question")
         
-        if extraction.get("phone"): ctx["phone"] = extraction["phone"]
+        if extraction.get("phone"): 
+            ctx["phone"] = extraction["phone"]
+            if not ctx.get("user_id"):
+                ctx["user_id"] = await self._lookup_user_id_by_phone(ctx["phone"])
+                if ctx["user_id"]:
+                    print(f"👤 [OrderHandler] Linked session to user_id: {ctx['user_id']} via phone")
+
         if extraction.get("address"): ctx["address"] = extraction["address"]
         
         res_en = ""
@@ -261,19 +315,30 @@ class OrderHandler:
             if not ctx["items"]:
                 res_en = f"Your cart is empty. What would you like to add from {ctx['restaurant_name']}?"
             elif not ctx["phone"] or not ctx["address"]:
-                res_en = "I need your phone and delivery address to complete the order."
+                res_en = f"I have your order ready for {self._cart_to_string(ctx['items'])}. However, I still need your {(not ctx['phone']) * 'phone number'} {(not ctx['phone'] and not ctx['address']) * 'and'} {(not ctx['address']) * 'delivery address'} to proceed."
             else:
-                avail = await self._check_restaurant_availability(ctx["restaurant_id"], ctx["lat"], ctx["lng"])
-                if not avail["available"]:
-                    res_en = f"I'm sorry, {ctx['restaurant_name']} is too far for delivery."
-                    res_type = "error"
-                else:
-                    ctx["location_id"] = avail["location_id"]
-                    if await self._save_order_to_db(ctx, session_id):
-                        res_en = f"Success! Your order from {ctx['restaurant_name']} has been placed."
-                        self.order_context[session_id].update({"items": [], "confirmed": True, "restaurant_id": None})
+                # We have both phone and address, now we confirm them
+                # Check if the user's latest query is a generic "yes" or "ok" vs a confirmation request
+                is_explicit_confirm = any(word in query_lower for word in ["yes", "han", "ji", "ok", "confirm", "order kar do", "kar do", "place"])
+                
+                if is_explicit_confirm and ctx.get("confirmation_details_shown"):
+                     # Actual placement
+                    avail = await self._check_restaurant_availability(ctx["restaurant_id"], ctx["lat"], ctx["lng"])
+                    if not avail["available"]:
+                        res_en = f"I'm sorry, {ctx['restaurant_name']} is too far for delivery."
+                        res_type = "error"
                     else:
-                        res_en = "Database error while placing your order. Please try again."
+                        ctx["location_id"] = avail["location_id"]
+                        if await self._save_order_to_db(ctx, session_id):
+                            res_en = f"Success! Your order from {ctx['restaurant_name']} has been placed. It will be delivered to {ctx['address']}."
+                            self.order_context[session_id].update({"items": [], "confirmed": True, "restaurant_id": None, "confirmation_details_shown": False})
+                        else:
+                            res_en = "Database error while placing your order. Please try again."
+                else:
+                    # Just asking for confirmation with existing details
+                    res_en = f"I've added {self._cart_to_string(ctx['items'])} from {ctx['restaurant_name']} to your cart. I'll be delivering it to {ctx['address']} and contacting you at {ctx['phone']}. Should I place the order now, or would you like to change anything?"
+                    res_type = "confirmation_prompt"
+                    ctx["confirmation_details_shown"] = True
 
         else:
             # Fallback for questions or general chat
@@ -302,11 +367,17 @@ class OrderHandler:
 
     async def _save_order_to_db(self, ctx: dict, session_id: str, voice_transcript: str = "") -> bool:
         try:
-            conn = _get_conn()   # ← was incorrectly neon_vector_store._get_conn()
+            conn = _get_conn()
             with conn:
                 with conn.cursor() as cur:
-                    # Prioritize real user_id from context, fallback to session_id if it looks like a UUID
-                    user_id = ctx.get("user_id") or (session_id if len(session_id) >= 32 else None)
+                    # Prioritize user_id from context, then fallback to session_id if it's a UUID, then lookup by phone
+                    user_id = ctx.get("user_id")
+                    if not user_id:
+                        is_uuid = bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', session_id, re.IGNORECASE))
+                        if is_uuid:
+                            user_id = session_id
+                        elif ctx.get("phone"):
+                            user_id = await self._lookup_user_id_by_phone(ctx["phone"])
                     subtotal = sum(float(i.get('price', 0)) * int(i.get('quantity', 1)) for i in ctx["items"])
                     tax_amount = round(subtotal * 0.15, 2)
                     delivery_fee = 100.0
