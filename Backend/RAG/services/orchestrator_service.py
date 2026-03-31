@@ -55,6 +55,13 @@ class OrchestratorService:
             assistant_response = result.get("response", "")
             self.session_manager.add_message(session_id, "assistant", assistant_response)
             
+            # 5. CART INJECTION: Ensure cart is always returned if available
+            if session_id in self.order_agent.order_context:
+                ctx_items = self.order_agent.order_context[session_id].get("items", [])
+                if ctx_items and not result.get("cart"):
+                    result["cart"] = ctx_items
+                    result["restaurant_name"] = self.order_agent.order_context[session_id].get("restaurant_name", result.get("restaurant_name", "Assistant"))
+
             # Fire-and-forget summary update (background task)
             asyncio.create_task(self.update_session_summary(session_id))
             

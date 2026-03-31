@@ -249,10 +249,14 @@ class OrderHandler:
         
         STRICT RULES:
         1. "add_item": ONLY extract items that appear in MENU CONTEXT above with a valid Item ID (UUID). Each item must have: name, quantity, price, item_id.
-        2. "confirm_order": User wants to finalize/confirm. If phone/address are already in EXISTING_USER_INFO, DO NOT ask for them again unless the user wants to CHANGE them.
-        3. If phone or address are provided in NEW QUERY, extract them to update the info.
-        4. HISTORY RESOLUTION: If user says "yes", "han", "kar do" and history shows a suggestion, find that item in MENU CONTEXT. If found with a UUID → add_item. If not found → question with error.
-        5. NEVER add items based only on history or summary — they MUST be in MENU CONTEXT also.
+        2. "remove_item": Identify items in CURRENT CART that the user wants to remove. Put their exact names or IDs in "remove_items".
+        3. "confirm_order": User wants to finalize/confirm. If phone/address are already in EXISTING_USER_INFO, DO NOT ask for them again.
+        4. If phone or address are provided in NEW QUERY, extract them to update the info.
+        5. HISTORY RESOLUTION & PERSISTENCE: 
+           - If an item was just removed in recent history (user said "remove", "nikal do"), DO NOT add it back in "items" unless the user explicitly said to re-add it.
+           - ONLY include items in the "items" list if they are being NEWLY ADDED or their QUANTITY is being explicitly changed. 
+           - DO NOT just list everything currently in the cart in the "items" output; that's what CURRENT CART is for.
+        6. If user says "yes", "han", "kar do" following a suggestion, add that suggested item.
         """
         
         messages = [
@@ -341,10 +345,10 @@ class OrderHandler:
             else:
                 # We have both phone and address, now we confirm them
                 # Check if the user's latest query is a generic "yes" or "ok" vs a confirmation request
-                is_explicit_confirm = any(word in query_lower for word in ["yes", "han", "ji", "ok", "confirm", "order kar do", "kar do", "place"])
+                is_explicit_confirm = any(word in query_lower for word in ["yes", "han", "ji", "ok", "confirm", "order kar do", "kar do", "place", "ہاں", "جی", "کر دو", "کنفرم", "بالکل", "bilkul", "han ji", "okay", "done", "येस", "कंफर्म", "bilkul bilkul", "sahi hai"])
                 
                 if (is_explicit_confirm and ctx.get("confirmation_details_shown")) or \
-                   (any(p in query_lower for p in ["confirm my order", "order confirm", "place my order", "order placement", "order kar do", "finalise"]) and ctx.get("phone") and ctx.get("address")):
+                   (any(p in query_lower for p in ["confirm my order", "order confirm", "place my order", "order placement", "order kar do", "finalise", "آرڈر کنفرم", "آرڈر کر دو", "confirm kar do", "order confirm kar do"]) and ctx.get("phone") and ctx.get("address")):
                      # Actual placement
                     avail = await self._check_restaurant_availability(ctx["restaurant_id"], ctx["lat"], ctx["lng"])
                     if not avail["available"]:

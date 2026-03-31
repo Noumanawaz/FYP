@@ -13,7 +13,9 @@ export interface ChatbotResponse {
   response_ur?: string;
   customer_name: string;
   current_order: any[];
+  cart?: any[]; // Normalize with backend's 'cart' key
   order_summary: string;
+  response_type?: string;
   error?: string;
 }
 
@@ -86,8 +88,10 @@ class ChatbotService {
         response_en: data.response_en || data.response,
         response_ur: data.response_ur,
         customer_name: data.customer_name || "",
-        current_order: data.current_order || [],
+        current_order: data.cart || data.current_order || [],
+        cart: data.cart || data.current_order || [],
         order_summary: data.order_summary || "",
+        response_type: data.response_type
       };
     } catch (error) {
       console.error("Error sending message to chatbot:", error);
@@ -137,8 +141,10 @@ class ChatbotService {
         response_en: data.response_en || data.response,
         response_ur: data.response_ur,
         customer_name: data.customer_name || "",
-        current_order: data.current_order || [],
+        current_order: data.cart || data.current_order || [],
+        cart: data.cart || data.current_order || [],
         order_summary: data.order_summary || "",
+        response_type: data.response_type
       };
     } catch (error) {
       console.error("Error sending voice data to chatbot:", error);

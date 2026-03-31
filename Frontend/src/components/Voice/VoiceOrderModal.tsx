@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, MicOff, X, Bot } from "lucide-react";
+import { Mic, MicOff, X, Bot, ShoppingBag, CheckCircle, Clock } from "lucide-react";
 import { useWhisperTranscription } from "../../hooks/useWhisperTranscription";
 import { VoiceOrderProcessor, ParsedOrder } from "../../utils/voiceOrderProcessor";
 import OrderConfirmationModal from "./OrderConfirmationModal";
@@ -24,8 +24,15 @@ interface VoiceOrderModalProps {
 }
 
 // Get RAG/chatbot base URL from env, fallback to API base URL without /api/v1, or default
-// Get RAG/chatbot base URL from env - helper kept if needed for future, or remove if strictly unused. 
-// Lint says unused, so removing it to be clean.
+const getChatbotBaseUrl = (): string => {
+  const ragUrl = process.env.VITE_RAG_BASE_URL || '';
+  if (ragUrl) return ragUrl;
+  const apiUrl = process.env.VITE_API_BASE_URL || '';
+  if (apiUrl) {
+    return apiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
+  }
+  return 'http://localhost:8000';
+};
 
 
 const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOrderSubmit }) => {
@@ -44,6 +51,10 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   const isSpeakingRef = useRef<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [cart, setCart] = useState<any[]>([]);
+  const [isOrderConfirmed, setIsOrderConfirmed] = useState(false);
+  const [restaurantName, setRestaurantName] = useState("");
+  const [isCartOpenMobile, setIsCartOpenMobile] = useState(false);
 
   // Helper to get voices, waiting for them to load if necessary
   const getVoices = (): Promise<SpeechSynthesisVoice[]> => {
@@ -279,6 +290,18 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
       };
 
       setMessages((prev) => [...prev, botMessage]);
+      
+      // Update cart and confirmation status
+      if (resp.cart) {
+        setCart(resp.cart);
+      }
+      if (resp.response_type === "success" || displayText.toLowerCase().includes("success")) {
+        setIsOrderConfirmed(true);
+      }
+      if ((resp as any).restaurant_name) {
+        setRestaurantName((resp as any).restaurant_name);
+      }
+
       // Speak Urdu if available; else English
       speak(speakText, () => {
         // Auto-resume listening after AI finishes speaking, if call is still active
@@ -346,6 +369,9 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
     setParsedOrder(null);
     setShowConfirmation(false);
     setMessages([]);
+    setCart([]);
+    setIsOrderConfirmed(false);
+    setRestaurantName("");
     stopListening();
 
     // Stop all forms of TTS
@@ -368,7 +394,26 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
   // Auto-send when listening stops and we have a transcript
   useEffect(() => {
     if (!isListening && transcript && transcript.trim().length > 0 && !isProcessing && !isSpeaking) {
-      handleSendMessage(transcript);
+      // 1. Lowercase and remove symbols/punctuation
+      // 2. Trim AGAIN after symbol removal to catch "thank you. ..." -> "thank you   " -> "thank you"
+      const cleanTranscript = transcript
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+        .trim();
+      
+      // Filter out common Whisper hallucinations during silence
+      const hallucinations = [
+        "thank you", "thanks", "thank you very much", "okay", "ok", 
+        "ji", "shukriya", "thank you so much", "bye", "goodbye",
+        "allah hafiz", "subscribers", "watching"
+      ];
+      
+      if (hallucinations.includes(cleanTranscript) || cleanTranscript.length < 2) {
+        console.log(`[VoiceOrderModal] Filtered hallucination: "${transcript}" (Cleaned: "${cleanTranscript}")`);
+        return;
+      }
+
+      handleSendMessage(transcript); // Send the original transcript to backend, but only if it passed the filter
     }
   }, [isListening, transcript, isProcessing, isSpeaking]);
 
@@ -407,8 +452,8 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
           <div className="absolute bottom-[-10%] right-[-10%] w-[70vw] h-[70vw] bg-blue-600/10 rounded-full blur-[100px] animate-pulse delay-700"></div>
         </div>
 
-        {/* Main Content Container */}
-        <div className="relative z-10 w-full max-w-3xl h-full flex flex-col pt-4 sm:pt-6 pb-4 sm:px-6">
+        {/* Main Content Container - Wider for Sidebar */}
+        <div className="relative z-10 w-full max-w-6xl h-full flex flex-col pt-4 sm:pt-6 pb-4 sm:px-6">
 
           {/* Minimal Header */}
           <div className="px-4 w-full flex justify-between items-center opacity-80 shrink-0 h-10">
@@ -418,6 +463,19 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Mobile Cart Toggle */}
+              <button 
+                onClick={() => setIsCartOpenMobile(!isCartOpenMobile)}
+                className="md:hidden relative p-2 bg-white/5 rounded-full border border-white/10"
+              >
+                <ShoppingBag className="w-5 h-5 text-primary-400" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-primary-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                    {cart.length}
+                  </span>
+                )}
+              </button>
+
               <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm">
                 <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
                 <span className="text-[10px] font-bold tracking-wider uppercase text-white/90">
@@ -448,51 +506,128 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
             /* Active Call State */
             <div className="flex-1 min-h-0 w-full flex flex-col">
 
-              {/* Chat History Area (Scrollable space natively expanding) */}
-              <div
-                id="chat-scroll-container"
-                className="flex-1 overflow-y-auto px-4 sm:px-6 scroll-smooth"
-                style={{ WebkitOverflowScrolling: 'touch' }}
-              >
-                <div className="flex flex-col min-h-full">
-                  <div className="flex flex-col gap-6 py-6 mt-auto">
-                    {messages.map((msg) => (
-                      <div key={msg.id} className={`flex w-full ${msg.type === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
-                        <div className={`max-w-[85%] sm:max-w-[75%] p-4 rounded-[24px] ${msg.type === 'user'
-                          ? 'bg-primary-500 text-white rounded-br-sm shadow-[0_4px_25px_rgba(14,165,233,0.25)]'
-                          : msg.isTyping
-                            ? 'bg-transparent border border-white/10 text-gray-400 rounded-bl-sm'
-                            : 'bg-white/10 backdrop-blur-md text-gray-50 rounded-bl-sm border border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.2)]'
-                          }`}>
-                          {msg.isTyping ? (
-                            <div className="flex items-center gap-1.5 h-6 px-2">
-                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></div>
-                            </div>
-                          ) : (
-                            <p className="text-[15px] sm:text-[16px] leading-[1.6] font-normal tracking-wide">{msg.content}</p>
-                          )}
+              {/* Response Layout: Chat + Sidebar */}
+              <div className="flex-1 min-h-0 w-full flex flex-row gap-6">
+                
+                {/* Chat History Area (Left Side) */}
+                <div
+                  id="chat-scroll-container"
+                  className="flex-1 overflow-y-auto px-4 sm:px-6 scroll-smooth bg-white/5 rounded-3xl border border-white/5"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
+                  <div className="flex flex-col min-h-full">
+                    <div className="flex flex-col gap-6 py-6 mt-auto">
+                      {messages.map((msg) => (
+                        <div key={msg.id} className={`flex w-full ${msg.type === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+                          <div className={`max-w-[85%] sm:max-w-[75%] p-4 rounded-[24px] ${msg.type === 'user'
+                            ? 'bg-primary-500 text-white rounded-br-sm shadow-[0_4px_25px_rgba(14,165,233,0.25)]'
+                            : msg.isTyping
+                              ? 'bg-transparent border border-white/10 text-gray-400 rounded-bl-sm'
+                              : 'bg-white/10 backdrop-blur-md text-gray-50 rounded-bl-sm border border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.2)]'
+                            }`}>
+                            {msg.isTyping ? (
+                              <div className="flex items-center gap-1.5 h-6 px-2">
+                                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                              </div>
+                            ) : (
+                              <p className="text-[15px] sm:text-[16px] leading-[1.6] font-normal tracking-wide">{msg.content}</p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
 
-                    {/* User Active Transcript */}
-                    {transcript && (
-                      <div className="flex w-full justify-end animate-fade-in-up">
-                        <div className="max-w-[85%] sm:max-w-[75%] p-4 rounded-[24px] bg-primary-500/40 backdrop-blur-md text-white rounded-br-sm border border-primary-400/30 shadow-[0_4px_20px_rgba(14,165,233,0.15)]">
-                          <p className="text-[15px] sm:text-[16px] leading-[1.6] font-normal flex items-baseline gap-2">
-                            {transcript}
-                            <span className="flex gap-1">
-                              <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce"></span>
-                              <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                              <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-                            </span>
-                          </p>
+                      {/* User Active Transcript */}
+                      {transcript && (
+                        <div className="flex w-full justify-end animate-fade-in-up">
+                          <div className="max-w-[85%] sm:max-w-[75%] p-4 rounded-[24px] bg-primary-500/40 backdrop-blur-md text-white rounded-br-sm border border-primary-400/30 shadow-[0_4px_20px_rgba(14,165,233,0.15)]">
+                            <p className="text-[15px] sm:text-[16px] leading-[1.6] font-normal flex items-baseline gap-2">
+                              {transcript}
+                              <span className="flex gap-1">
+                                <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce"></span>
+                                <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                                <span className="w-1 h-1 bg-white/70 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                              </span>
+                            </p>
+                          </div>
                         </div>
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cart Sidebar (Right Side) - Hidden on very small screens, shown from md up */}
+                <div className="hidden md:flex w-80 flex-col bg-white/5 backdrop-blur-sm rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
+                  <div className="p-5 border-b border-white/10 flex items-center justify-between bg-primary-500/10">
+                    <div className="flex items-center gap-2">
+                      <ShoppingBag className="w-5 h-5 text-primary-400" />
+                      <h3 className="font-bold text-sm tracking-widest uppercase">Your Cart</h3>
+                    </div>
+                    {cart.length > 0 && (
+                      <span className="bg-primary-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        {cart.length} ITEMS
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
+                    {cart.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-30">
+                        <ShoppingBag className="w-12 h-12 mb-4" />
+                        <p className="text-xs uppercase tracking-widest">Cart is empty</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {cart.map((item, idx) => (
+                          <div 
+                            key={`${item.item_id || idx}`}
+                            className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col gap-2 animate-fade-in-up"
+                            style={{ animationDelay: `${idx * 0.1}s` }}
+                          >
+                            <div className="flex justify-between items-start">
+                              <h4 className="text-sm font-semibold text-white/90 leading-tight flex-1">{item.name}</h4>
+                              <span className="text-xs font-bold text-primary-400 ml-2">Rs. {item.price}</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <div className="flex items-center gap-2 text-[11px] text-white/50 bg-white/5 px-2 py-1 rounded-lg">
+                                <span className="uppercase tracking-tight">Qty:</span>
+                                <span className="font-bold text-white">{item.quantity}</span>
+                              </div>
+                              <span className="text-[11px] font-bold text-white/70">
+                                Total: Rs. {parseInt(item.price) * parseInt(item.quantity)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Cart Footer */}
+                  <div className="p-5 border-t border-white/10 bg-black/20">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-xs text-white/40 uppercase tracking-widest">Subtotal</span>
+                      <span className="text-lg font-bold text-white">
+                        Rs. {cart.reduce((sum, item) => sum + (parseInt(item.price) * parseInt(item.quantity)), 0)}
+                      </span>
+                    </div>
+
+                    {isOrderConfirmed ? (
+                      <div className="bg-green-500/20 border border-green-500/50 rounded-2xl p-4 flex items-center gap-3 animate-pulse">
+                        <CheckCircle className="w-6 h-6 text-green-400" />
+                        <div>
+                          <p className="text-xs font-bold text-green-400 uppercase tracking-wider">Order Confirmed</p>
+                          <p className="text-[10px] text-green-200/70">{restaurantName || "Processing..."}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 text-[10px] uppercase tracking-[0.2em] font-bold italic">
+                        <Clock className="w-3 h-3" />
+                        Awaiting Confirmation
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -587,6 +722,65 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
             }
         `}</style>
       </div>
+
+      {/* Mobile Cart Slider/Drawer */}
+      {isCartOpenMobile && (
+        <div className="fixed inset-0 z-[60] md:hidden flex flex-col bg-gray-900/95 backdrop-blur-xl animate-fade-in">
+          <div className="p-6 flex justify-between items-center border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <ShoppingBag className="w-6 h-6 text-primary-400" />
+              <h3 className="text-xl font-bold tracking-tight">Your Cart</h3>
+            </div>
+            <button onClick={() => setIsCartOpenMobile(false)} className="p-2 hover:bg-white/10 rounded-full">
+              <X className="w-7 h-7" />
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-6">
+            {cart.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center opacity-30">
+                <ShoppingBag className="w-16 h-16 mb-4" />
+                <p className="uppercase tracking-[0.2em] text-sm">Cart is empty</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {cart.map((item, idx) => (
+                  <div key={idx} className="bg-white/5 rounded-3xl p-5 border border-white/5">
+                    <div className="flex justify-between mb-2">
+                       <h4 className="text-lg font-medium">{item.name}</h4>
+                       <span className="font-bold text-primary-400">Rs. {item.price}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-white/50">
+                       <span>Quantity: {item.quantity}</span>
+                       <span>Total: Rs. {parseInt(item.price) * parseInt(item.quantity)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-8 border-t border-white/10 bg-black/40">
+             <div className="flex justify-between items-center mb-6">
+                <span className="text-sm text-white/40 uppercase tracking-widest">Grand Total</span>
+                <span className="text-3xl font-bold">Rs. {cart.reduce((sum, item) => sum + (parseInt(item.price) * parseInt(item.quantity)), 0)}</span>
+             </div>
+             {isOrderConfirmed ? (
+                <div className="bg-green-500/20 border border-green-500/50 rounded-3xl p-6 flex items-center gap-4">
+                  <CheckCircle className="w-8 h-8 text-green-400" />
+                  <div>
+                    <p className="text-lg font-bold text-green-400">Order Placed!</p>
+                    <p className="text-sm text-green-200/60">Enjoy your meal at {restaurantName}</p>
+                  </div>
+                </div>
+             ) : (
+                <Button onClick={() => setIsCartOpenMobile(false)} className="w-full py-4 rounded-2xl text-lg">
+                   Continue Ordering
+                </Button>
+             )}
+          </div>
+        </div>
+      )}
 
       {/* Order Confirmation Modal - Kept as before */}
       {parsedOrder && <OrderConfirmationModal isOpen={showConfirmation} onClose={() => setShowConfirmation(false)} onConfirm={handleConfirmOrder} onEdit={handleEditOrder} parsedOrder={parsedOrder} confirmationMessage={VoiceOrderProcessor.generateConfirmationMessage(parsedOrder)} />}

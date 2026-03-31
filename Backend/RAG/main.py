@@ -103,6 +103,7 @@ class ChatResponse(BaseModel):
     confidence: float
     suggestions: List[str]
     response_type: str = "chat"
+    cart: Optional[List[Dict]] = []
 
 @app.get("/health")
 async def health_check():
@@ -130,7 +131,8 @@ async def chat(request: ChatRequest):
             restaurant_name=result.get("restaurant_name", "Assistant"),
             confidence=result.get("confidence", 1.0),
             suggestions=result.get("suggestions", []),
-            response_type=result.get("response_type", "chat")
+            response_type=result.get("response_type", "chat"),
+            cart=result.get("cart", [])
         )
     except Exception as e:
         print(f"❌ Chat Error: {e}")
@@ -267,7 +269,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     "restaurant_name": result.get("restaurant_name", "Assistant"),
                     "confidence": result.get("confidence", 1.0),
                     "suggestions": result.get("suggestions", []),
-                    "response_type": result.get("response_type", "chat")
+                    "response_type": result.get("response_type", "chat"),
+                    "cart": result.get("cart", [])
                 }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
