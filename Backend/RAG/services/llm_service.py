@@ -27,12 +27,11 @@ class OpenAILLMService:
 
         # Check if API key is properly configured
         if not self.api_key or self.api_key.strip() in ['your_openai_api_key_here', '']:
-            print("⚠️ OpenAI API key not configured. Using fallback responses.")
+            print("⚠️ AI service not configured. Using fallback responses.")
             self.api_configured = False
         else:
             self.api_configured = True
-            print(f"✅ Using OpenAI model: {self.model}")
-        print(f"ℹ️ OpenAI base_url: {self.base_url}")
+            print(f"✅ AI service ready.")
 
     async def _call_openai_async(self, messages: List[Dict], max_tokens: Optional[int] = None, response_format: Optional[Dict] = None) -> str:
         """Async call to OpenAI API using persistent httpx client"""
@@ -42,7 +41,6 @@ class OpenAILLMService:
         import time
         start_t = time.time()
         tokens = max_tokens or self.max_tokens
-        print(f"➡️ [LLM] Calling OpenAI Async ({self.model})...")
         
         payload = {
             "model": self.model,
@@ -59,16 +57,16 @@ class OpenAILLMService:
                 json=payload
             )
             
-            print(f"⏱️ [LLM] OpenAI responded in {time.time() - start_t:.2f}s (Status: {resp.status_code})")
+            print(f"⏱️ [AI] Responded in {time.time() - start_t:.2f}s")
             
             if resp.status_code == 200:
                 result = resp.json()
                 if 'choices' in result and result['choices']:
                     return result['choices'][0]['message']['content'].strip()
             else:
-                print(f"❌ OpenAI API error {resp.status_code}: {resp.text}")
+                print(f"❌ AI service error {resp.status_code}")
         except Exception as e:
-            print(f"❌ Error calling OpenAI async: {e}")
+            print(f"❌ AI service error: {e}")
             
         return ""
 
@@ -78,7 +76,7 @@ class OpenAILLMService:
             return ""
 
         tokens = max_tokens or self.max_tokens
-        print(f"➡️  Calling OpenAI (Sync) /chat/completions | model={self.model}")
+        pass  # AI service call
         try:
             resp = requests.post(
                 f"{self.base_url}/chat/completions",
@@ -101,9 +99,9 @@ class OpenAILLMService:
                 if 'choices' in result and result['choices']:
                     return result['choices'][0]['message']['content'].strip()
             else:
-                print(f"❌ OpenAI API error {resp.status_code}: {resp.text}")
+                print(f"❌ AI service error {resp.status_code}")
         except Exception as e:
-            print(f"❌ Network error calling OpenAI: {e}")
+            print(f"❌ AI service error: {e}")
             
     async def generate_dual_response(self, user_message: str, context: str = "", conversation_history: list = None) -> Dict[str, str]:
         """
@@ -118,13 +116,15 @@ class OpenAILLMService:
         system_prompt = self._create_system_prompt() + """
         CRITICAL: You MUST respond in JSON format with exactly two keys:
         1. "en": Your natural English response.
-        2. "ur": Your natural Roman Urdu response (Urdu written in English/Latin letters).
+        2. "ur": Your natural Urdu response written in PROPER URDU SCRIPT (Arabic/Nastaliq characters - e.g. آپ کا کھانا تیار ہے).
 
-        Example:
-        {
-          "en": "Hello, how can I help you?",
-          "ur": "Hello, main aapki kya madad kar sakta hoon?"
-        }
+        URDU LANGUAGE RULES:
+        - Write "ur" ONLY in real Urdu script (Unicode Arabic characters like ا ب پ ت ث ج etc.).
+        - DO NOT use Roman Urdu (do not write 'aapka khana' - write 'آپ کا کھانا' instead).
+        - English loanwords that Pakistanis naturally use in Urdu conversation should stay in English. For example: restaurant names, food item names ("Biryani", "Karahi"), prices ("PKR 500"), and brand names ("Cheezious") should stay as they are.
+        - Speak naturally like a friendly Pakistani assistant, NOT like a formal translated document.
+        - CORRECT example: {"en": "Hello, how can I help you?", "ur": "ہیلو! میں آپ کی کیا مدد کر سکتا ہوں؟"}
+        - WRONG example: {"ur": "Hello, main aapki kya madad kar sakta hoon?"} ← This is Roman Urdu, NOT allowed.
         """
         
         # Build user message with context
