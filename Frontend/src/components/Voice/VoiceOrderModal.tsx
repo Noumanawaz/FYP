@@ -279,8 +279,10 @@ const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({ isOpen, onClose, onOr
       setMessages((prev) => prev.filter((msg) => msg.id !== "typing"));
 
       const displayText = (resp as any).response_en || resp.response;
-      const speakText = (resp as any).response_ur || displayText;
-      console.info("[OrderModal][HTTP] chat_response", { displayText, hasUrdu: Boolean((resp as any).response_ur) });
+      // Only speak Urdu if response_ur actually contains real Urdu/Arabic script characters
+      const urText = (resp as any).response_ur || "";
+      const speakText = /[\u0600-\u06FF]/.test(urText) ? urText : displayText;
+      console.info("[OrderModal][HTTP] chat_response", { displayText, hasRealUrdu: /[\u0600-\u06FF]/.test(urText) });
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),

@@ -103,15 +103,16 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
         const payload = JSON.parse(evt.data);
         if (payload.type === "chat_response" && payload.response) {
           const displayText = payload.response_en || payload.response;
-          // Prefer Urdu for speaking if available and contains actual text, 
-          // otherwise fallback to English or raw response.
-          // Note: If you want the bot to speak Urdu, ensure payload.response_ur is populated.
-          const speakText = (payload.response_ur && payload.response_ur.length > 2) ? payload.response_ur : (payload.response_en || payload.response);
+          // Only use Urdu script if it actually contains Arabic/Urdu characters
+          // (guards against receiving empty string or leftover Roman Urdu)
+          const urText = payload.response_ur || "";
+          const hasRealUrdu = /[\u0600-\u06FF]/.test(urText);
+          const speakText = hasRealUrdu ? urText : displayText;
 
           console.info("[WS] chat_response processing", {
-            displayTextPreview: displayText.substring(0, 20),
-            speakTextPreview: speakText.substring(0, 20),
-            hasUrdu: Boolean(payload.response_ur),
+            displayTextPreview: displayText.substring(0, 30),
+            speakTextPreview: speakText.substring(0, 30),
+            hasRealUrdu,
             ttsEnabled
           });
 
@@ -154,13 +155,13 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
       // 1. Try Uplift/External TTS first if configured
       try {
         const upliftApiKey = (import.meta as any).env?.VITE_UPLIFT_API_KEY || getEnvVar('VITE_UPLIFT_API_KEY', '');
-        const urduVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_UR;
-        const englishVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_EN;
+        const urduVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_UR || getEnvVar('VITE_UPLIFT_VOICE_UR', 'v_8eelc901');
+        const englishVoiceId = (import.meta as any).env?.VITE_UPLIFT_VOICE_EN || getEnvVar('VITE_UPLIFT_VOICE_EN', 'v_8eelc901');
 
-        if (upliftApiKey && (urduVoiceId || englishVoiceId)) {
+        if (upliftApiKey) {
           await speakWithUplift(
             text,
-            isUrduScript ? (urduVoiceId || "v_8eelc901") : (englishVoiceId || "v_8eelc901"),
+            isUrduScript ? urduVoiceId : englishVoiceId,
             upliftApiKey
           );
           console.info("[TTS] Uplift playback queued");
@@ -263,8 +264,10 @@ const VoiceChatbotModal: React.FC<VoiceChatbotModalProps> = ({ isOpen, onClose }
       } else {
         const response = await chatbotService.current.sendMessage(userMessage.message);
         const displayText = response.response_en || response.response;
-        const speakText = response.response_ur || displayText;
-        console.info("[HTTP] chat_response", { displayText, hasUrdu: Boolean(response.response_ur) });
+        // Only speak Urdu if it actually contains real Urdu script
+        const urText = response.response_ur || "";
+        const speakText = /[\u0600-\u06FF]/.test(urText) ? urText : displayText;
+        console.info("[HTTP] chat_response", { displayText, hasRealUrdu: /[\u0600-\u06FF]/.test(urText) });
         const botMessage: ChatbotMessage = {
           message: displayText,
           timestamp: new Date().toISOString(),
