@@ -245,22 +245,34 @@ class OrderHandler:
         USER QUERY: "{query}"
         
         JSON FORMAT: {{"intent": str, "items": list, "remove_items": list, "phone": str, "address": str, "suggestion": str, "error": str}}
-        Intents: ["add_item", "remove_item", "update_item", "view_cart", "clear_cart", "confirm_order", "set_info", "question"]
+        
+        VALID INTENTS:
+        - "add_item": user only wants to add items
+        - "remove_item": user only wants to remove items
+        - "modify_cart": user wants to BOTH remove AND add items in the same message
+        - "update_item": change quantity of existing item
+        - "view_cart": show what's in cart
+        - "clear_cart": empty the entire cart
+        - "confirm_order": finalize and place order
+        - "set_info": provide phone/address
+        - "question": pure information question, NO cart changes
+        
+        REMOVE KEYWORDS (Urdu/English) — if ANY of these appear, set remove_items and use remove_item or modify_cart intent:
+        ہٹا دو, ہٹاؤ, اٹھاؤ, نکالو, نکال دو, ریموف, ہٹا, ہٹا دیو, remove, nikal do, hata do, hatao, uthao, nikalo, drop, cancel item
         
         STRICT RULES:
-        1. "add_item": ONLY extract items that appear in MENU CONTEXT above with a valid Item ID (UUID). Each item must have: name, quantity, price, item_id.
-        2. "remove_item": Identify items in CURRENT CART that the user wants to remove. Put their exact names or IDs in "remove_items".
-        3. "confirm_order": User wants to finalize/confirm. If phone/address are already in EXISTING_USER_INFO, DO NOT ask for them again.
-        4. If phone or address are provided in NEW QUERY, extract them to update the info.
-        5. HISTORY RESOLUTION & PERSISTENCE: 
-           - If an item was just removed in recent history (user said "remove", "nikal do"), DO NOT add it back in "items" unless the user explicitly said to re-add it.
-           - ONLY include items in the "items" list if they are being NEWLY ADDED or their QUANTITY is being explicitly changed. 
-           - DO NOT just list everything currently in the cart in the "items" output; that's what CURRENT CART is for.
-        6. If user says "yes", "han", "kar do" following a suggestion, add that suggested item.
+        1. "add_item" / "modify_cart" items list: ONLY items in MENU CONTEXT with a valid Item ID (UUID). Each must have: name, quantity, price, item_id.
+        2. "remove_item" / "modify_cart" remove_items list: item names or IDs from CURRENT CART the user wants removed. Use the EXACT name from CURRENT CART.
+        3. CRITICAL: If the user's message contains ANY remove keyword (see above) AND there are items in CURRENT CART, you MUST populate "remove_items" with the matching cart item name(s) and set intent to "remove_item" or "modify_cart". NEVER return intent="question" when user is asking to remove something.
+        4. If user wants to remove AND add in the same message → intent="modify_cart", populate both "remove_items" and "items".
+        5. "confirm_order": If phone/address are already in EXISTING_USER_INFO, DO NOT ask for them again.
+        6. HISTORY PERSISTENCE: If an item was removed in recent history, do NOT add it back in "items" unless user explicitly re-adds it.
+        7. If user says "yes", "han", "kar do" following a suggestion, add that suggested item.
+        8. "question" intent means ZERO cart changes — only use it for pure info questions with no add/remove intent.
         """
         
         messages = [
-            {"role": "system", "content": "You are a specialized order extractor."},
+            {"role": "system", "content": "You are a specialized order extractor. Always output valid JSON."},
             {"role": "user", "content": extraction_prompt}
         ]
         
@@ -280,114 +292,137 @@ class OrderHandler:
         res_en = ""
         res_type = "order_action"
 
-        # 3. Process Intents
-        if intent == "add_item":
+        # ─────────────────────────────────────────────────────────────────
+        # 3. DATA-DRIVEN CART PROCESSING
+        #    Always process remove_items and items REGARDLESS of intent label.
+        #    This ensures combined actions (modify_cart) and misclassified
+        #    intents both work correctly.
+        # ─────────────────────────────────────────────────────────────────
+
+        removed_names = []
+        added_names = []
+
+        # STEP A: Always process removals first
+        to_remove = extraction.get("remove_items", [])
+        if to_remove and ctx["items"]:
+            new_cart = []
+            for item in ctx["items"]:
+                rem = False
+                for r in to_remove:
+                    if isinstance(r, str) and (
+                        r.lower() in item["name"].lower() or
+                        item["name"].lower() in r.lower() or
+                        r == item.get("item_id")
+                    ):
+                        rem = True
+                        break
+                if not rem:
+                    new_cart.append(item)
+                else:
+                    removed_names.append(item["name"])
+            ctx["items"] = new_cart
+            print(f"🗑️ [OrderHandler] Removed from cart: {removed_names}")
+
+        # STEP B: Process additions (only for intents that add items)
+        if intent in ("add_item", "modify_cart", "update_item"):
             new_items = extraction.get("items", [])
-            safe_added = []
             for item in new_items:
                 if isinstance(item, dict):
                     item_id = item.get("item_id")
                     if item_id and len(item_id) >= 32:
-                        safe_added.append({
-                            "name": item.get("name", "Item"),
-                            "quantity": int(item.get("quantity", 1)),
-                            "price": float(item.get("price", 0)),
-                            "item_id": item_id
-                        })
-            if safe_added:
-                ctx["items"].extend(safe_added)
-                res_en = f"I've added {', '.join([i['name'] for i in safe_added])} to your {ctx['restaurant_name']} cart. Anything else, or should I confirm?"
-            else:
-                res_en = f"I couldn't find those specific items in the {ctx['restaurant_name']} menu. Would you like to try the options?"
-                res_type = "error"
-        
-        elif intent == "remove_item":
-            to_remove = extraction.get("remove_items", [])
-            new_cart = []
-            removed = []
-            for item in ctx["items"]:
-                rem = False
-                for r in to_remove:
-                    if isinstance(r, str) and (r.lower() in item["name"].lower() or r == item.get("item_id")):
-                        rem = True
-                        break
-                if not rem: new_cart.append(item)
-                else: removed.append(item["name"])
-            
-            ctx["items"] = new_cart
-            if removed: res_en = f"Removed {', '.join(removed)} from your cart. Current cart: {self._cart_to_string(ctx['items'])}."
-            else: res_en = f"I couldn't find those to remove. Cart has: {self._cart_to_string(ctx['items'])}."
+                        if intent == "update_item":
+                            # Update quantity of existing item
+                            for ci in ctx["items"]:
+                                if ci.get("item_id") == item_id or item.get("name", "").lower() in ci["name"].lower():
+                                    ci["quantity"] = int(item.get("quantity", ci["quantity"]))
+                                    added_names.append(f"{ci['name']} (qty updated)")
+                                    break
+                        else:
+                            ctx["items"].append({
+                                "name": item.get("name", "Item"),
+                                "quantity": int(item.get("quantity", 1)),
+                                "price": float(item.get("price", 0)),
+                                "item_id": item_id
+                            })
+                            added_names.append(item.get("name", "Item"))
+            print(f"🛒 [OrderHandler] Added to cart: {added_names}")
 
-        elif intent == "update_item":
-            updates = extraction.get("items", [])
-            upd = False
-            for u in updates:
-                for item in ctx["items"]:
-                    if item.get("item_id") == u.get("item_id") or u.get("name", "").lower() in item["name"].lower():
-                        item["quantity"] = int(u.get("quantity", item["quantity"]))
-                        upd = True
-            if upd: res_en = f"Updated your cart. Now: {self._cart_to_string(ctx['items'])}."
-            else: res_en = "I couldn't find that item in your cart."
+        # STEP C: Build response based on what actually happened
+        if removed_names or added_names:
+            parts = []
+            if removed_names:
+                parts.append(f"removed {', '.join(removed_names)}")
+            if added_names:
+                parts.append(f"added {', '.join(added_names)}")
+            cart_str = self._cart_to_string(ctx["items"])
+            res_en = f"I've {' and '.join(parts)} from your cart. Current cart: {cart_str}. Anything else?"
+            # Override intent for response generation
+            intent = "modify_cart" if (removed_names and added_names) else ("remove_item" if removed_names else "add_item")
 
+        # STEP D: Handle intents that weren't about add/remove
         elif intent == "clear_cart":
             ctx["items"] = []
-            res_en = f"I've cleared your {ctx['restaurant_name']} cart."
+            res_en = f"I've cleared your {ctx['restaurant_name']} cart! What would you like to order?"
 
         elif intent == "view_cart":
-            if not ctx["items"]: res_en = "Your cart is currently empty."
-            else: res_en = f"In your {ctx['restaurant_name']} cart: {self._cart_to_string(ctx['items'])}. Shall I confirm?"
+            if not ctx["items"]: 
+                res_en = "Your cart is currently empty."
+            else: 
+                res_en = f"In your {ctx['restaurant_name']} cart: {self._cart_to_string(ctx['items'])}. Shall I confirm?"
 
         elif intent == "confirm_order":
             if not ctx["items"]:
                 res_en = f"Your cart is empty. What would you like to add from {ctx['restaurant_name']}?"
             elif not ctx["phone"] or not ctx["address"]:
-                res_en = f"I have your order ready for {self._cart_to_string(ctx['items'])}. However, I still need your {(not ctx['phone']) * 'phone number'} {(not ctx['phone'] and not ctx['address']) * 'and'} {(not ctx['address']) * 'delivery address'} to proceed."
+                missing = []
+                if not ctx["phone"]: missing.append("phone number")
+                if not ctx["address"]: missing.append("delivery address")
+                res_en = f"I have your order ready ({self._cart_to_string(ctx['items'])}). I still need your {' and '.join(missing)} to proceed."
             else:
-                # We have both phone and address, now we confirm them
-                # Check if the user's latest query is a generic "yes" or "ok" vs a confirmation request
-                is_explicit_confirm = any(word in query_lower for word in ["yes", "han", "ji", "ok", "confirm", "order kar do", "kar do", "place", "ہاں", "جی", "کر دو", "کنفرم", "بالکل", "bilkul", "han ji", "okay", "done", "येस", "कंफर्म", "bilkul bilkul", "sahi hai"])
+                is_explicit_confirm = any(word in query_lower for word in [
+                    "yes", "han", "ji", "ok", "confirm", "order kar do", "kar do", "place",
+                    "ہاں", "جی", "کر دو", "کنفرم", "بالکل", "bilkul", "han ji", "okay", "done",
+                    "येस", "कंफर्म", "bilkul bilkul", "sahi hai"
+                ])
                 
                 if (is_explicit_confirm and ctx.get("confirmation_details_shown")) or \
-                   (any(p in query_lower for p in ["confirm my order", "order confirm", "place my order", "order placement", "order kar do", "finalise", "آرڈر کنفرم", "آرڈر کر دو", "confirm kar do", "order confirm kar do"]) and ctx.get("phone") and ctx.get("address")):
-                     # Actual placement
+                   any(p in query_lower for p in [
+                       "confirm my order", "order confirm", "place my order", "finalise",
+                       "آرڈر کنفرم", "آرڈر کر دو", "confirm kar do", "order confirm kar do"
+                   ]):
                     avail = await self._check_restaurant_availability(ctx["restaurant_id"], ctx["lat"], ctx["lng"])
                     if not avail["available"]:
                         res_en = f"I'm sorry, {ctx['restaurant_name']} is too far for delivery. Please try another restaurant."
                         res_type = "error"
                     else:
                         ctx["location_id"] = avail["location_id"]
-                        # Ensure we have the latest user_id
                         if user_id: ctx["user_id"] = user_id
                         
                         if await self._save_order_to_db(ctx, session_id):
                             res_en = f"Success! Your order from {ctx['restaurant_name']} has been placed. It will be delivered to {ctx['address']}."
                             print(f"📦 [OrderHandler] Order SUCCESS for {ctx.get('user_id')}")
-                            # Clear cart but KEEP user info for next time
                             self.order_context[session_id].update({
-                                "items": [], 
-                                "confirmed": True, 
-                                "restaurant_id": None, 
-                                "confirmation_details_shown": False
+                                "items": [], "confirmed": True,
+                                "restaurant_id": None, "confirmation_details_shown": False
                             })
                         else:
                             res_en = "Database error while placing your order. Please try again."
                 else:
-                    # Just asking for confirmation with existing details
-                    res_en = f"I've added {self._cart_to_string(ctx['items'])} from {ctx['restaurant_name']} to your cart. I'll be delivering it to {ctx['address']} and contacting you at {ctx['phone']}. Should I place the order now, or would you like to change anything?"
+                    res_en = f"I have {self._cart_to_string(ctx['items'])} from {ctx['restaurant_name']} ready. Delivering to {ctx['address']}, contacting at {ctx['phone']}. Shall I place the order?"
                     res_type = "confirmation_prompt"
                     ctx["confirmation_details_shown"] = True
 
         else:
-            # Fallback for questions or general chat
+            # Pure question / general chat — no cart changes
             dual = await self.llm_service.generate_dual_response(
                 user_message=query,
-                context=f"Restaurant: {ctx['restaurant_name']}. Cart: {json.dumps(ctx['items'])}. Menu: {menu_context}\n\nINSTRUCTION: You are a VOICE ORDERING AGENT. If the customer wants to order, you CAN add items for them. Just ask them what they want.",
+                context=f"Restaurant: {ctx['restaurant_name']}. Cart: {json.dumps(ctx['items'])}. Menu: {menu_context}\n\nINSTRUCTION: You are a VOICE ORDERING AGENT. Help the customer. You CAN add or remove items — just ask what they want.",
                 conversation_history=history
             )
             return {
                 "response": dual['en'], "response_en": dual['en'], "response_ur": dual['ur'],
                 "response_type": "order_agent_chat", "cart": ctx["items"], "restaurant_name": ctx["restaurant_name"],
-                "confidence": 1.0, "suggestions": ["Confirm Order", "View Cart"]
+                "confidence": 1.0, "suggestions": ["Check my cart", "Confirm order"]
             }
 
         dual = await self.llm_service.generate_dual_response(
